@@ -18,6 +18,10 @@ Pullwise is an open-source, self-hosted AI code review platform that combines st
 - **GitHub Integration** - Seamless integration with GitHub webhooks for automatic PR reviews
 - **Enterprise Ready** - SAML SSO, RBAC, audit logs, and dedicated support available
 
+### Architecture
+
+![Pullwise Architecture](/img/arquitetura.png)
+
 ## This Documentation Project
 
 This is the official documentation website built with [Docusaurus](https://docusaurus.io/).
