@@ -1,192 +1,264 @@
-# Pullwise Documentation
+# Pullwise - The Open Code Review Platform
 
-Official documentation for [Pullwise](https://pullwise.ai) - The Open Code Review Platform.
+<div align="center">
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-purple.svg)](https://opensource.org/licenses/MIT)
-[![Docusaurus](https://img.shields.io/badge/Docusaurus-3.5-blue.svg)](https://docusaurus.io/)
+  ![Pullwise Logo](https://pullwise.ai/owl-icon.svg)
 
-## What is Pullwise?
+  **The Open Code Review Platform**
 
-Pullwise is an open-source, self-hosted AI code review platform that combines static analysis (SAST) with large language models (LLMs) to provide intelligent, automated code reviews.
+  [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+  [![Docker](https://img.shields.io/badge/docker-pull-blue.svg)](https://hub.docker.com/r/pullwise/pullwise-ce)
+  [![GitHub Stars](https://img.shields.io/github/stars/integralltech/pullwise-ai?style=social)](https://github.com/integralltech/pullwise-ai)
 
-### Key Features
+  [Website](https://pullwise.ai) • [Docs](https://docs.pullwise.ai) • [Demo](https://pullwise.ai/demo) • [Discord](https://discord.gg/pullwise)
 
-- **Hybrid SAST + AI** - Combines static analysis tools with LLMs for comprehensive code reviews
-- **Auto-Fix** - One-click apply AI-generated fixes with preview and rollback support
-- **Multi-Model LLM** - Support for GPT-4, Claude, Gemini, and local models via Ollama
-- **Plugin System** - 200+ community plugins for custom linters and security rules
-- **GitHub Integration** - Seamless integration with GitHub webhooks for automatic PR reviews
-- **Enterprise Ready** - SAML SSO, RBAC, audit logs, and dedicated support available
+  **"Start free, scale enterprise."**
 
-### Architecture
+  Production-Grade. Free Forever. MIT Licensed.
 
-![Pullwise Architecture](../images/arquitetura.png)
-
-## This Documentation Project
-
-This is the official documentation website built with [Docusaurus](https://docusaurus.io/).
-
-### Tech Stack
-
-- **Docusaurus 3.5+** - Static site generator
-- **React 18** - UI components
-- **TypeScript** - Type-safe development
-- **Mermaid** - Diagram rendering
-- **Infima** - CSS styling framework
-
-## Quick Start
-
-### Prerequisites
-
-- Node.js 18+ and npm/yarn/pnpm
-
-### Installation
-
-```bash
-# Install dependencies
-npm install
-
-# Start development server
-npm run start
-```
-
-Open [http://localhost:3000](http://localhost:3000) to view the documentation.
-
-### Build for Production
-
-```bash
-# Build static files
-npm run build
-
-# Serve production build locally
-npm run serve
-```
-
-## Project Structure
-
-```
-docs/
-├── docusaurus.config.ts    # Main configuration
-├── sidebars.ts              # Sidebar navigation
-├── package.json             # Dependencies and scripts
-├── src/
-│   ├── css/
-│   │   └── custom.css      # Custom styles
-│   └── pages/
-│       └── index.tsx       # Homepage
-├── static/                  # Static assets (images, etc.)
-└── docs/                    # Documentation content
-    ├── getting-started/     # Quick start and installation
-    ├── user-guide/          # User documentation
-    ├── developer-guide/     # Contributor documentation
-    ├── plugin-development/  # Plugin API reference
-    ├── api/                 # API reference
-    ├── deployment/          # Deployment guides
-    └── administration/      # Admin documentation
-```
-
-## Documentation Sections
-
-### Getting Started
-- Introduction to Pullwise
-- Quick start guide (5 minutes setup)
-- Installation options (Docker, Kubernetes, Manual)
-- First review walkthrough
-- Configuration and troubleshooting
-
-### User Guide
-- Creating and managing projects
-- Connecting repositories (GitHub, GitLab, BitBucket)
-- Configuring webhooks
-- Understanding review results
-- Auto-fix feature
-- Integrations (Jira, Linear, Slack)
-- Analytics and metrics
-
-### Developer Guide
-- Architecture overview
-- Local development setup
-- Backend (Java 17, Spring Boot, Maven)
-- Frontend (React, Vite, TypeScript)
-- Contributing workflow
-- Code style and testing
-
-### Plugin Development
-- Plugin architecture
-- Plugin types (SAST, Linter, Security, Custom LLM)
-- API reference
-- Examples and tutorials
-- Packaging and publishing
-
-### API Reference
-- REST API documentation
-- Authentication (JWT)
-- Webhook endpoints
-
-### Deployment
-- Docker deployment
-- Kubernetes/Helm charts
-- Environment configuration
-- Security (SSL, secrets)
-- Monitoring (Prometheus, Grafana, Jaeger)
-
-### Administration
-- User management
-- Security (RBAC, SAML SSO)
-- Maintenance (backups, migrations)
-- Edition comparison (Community, Professional, Enterprise)
-
-## Development
-
-### Adding New Content
-
-1. Create a new markdown file in the appropriate `docs/` subdirectory
-2. Add the file to `sidebars.ts`
-3. Run `npm run start` to preview
-
-### Custom Styling
-
-Edit `src/css/custom.css` to modify the site's appearance. The project uses Docusaurus's [Infima](https://infima.dev/) CSS framework with custom purple theme variables.
-
-### Internationalization
-
-The documentation supports English, Portuguese (pt), and Spanish (es). Translations are located in the `i18n/` directory.
-
-## Deployment
-
-### Docker
-
-```bash
-# Build documentation container
-docker build -t pullwise-docs .
-
-# Run documentation server
-docker run -p 80:80 pullwise-docs
-```
-
-### Docker Compose
-
-```bash
-docker-compose -f docker-compose.docs.yml up -d
-```
-
-The documentation will be available at [http://localhost:8080](http://localhost:8080).
-
-## Contributing
-
-We welcome contributions! Please see the [Contributing Guide](https://docs.pullwise.ai/docs/developer-guide/contributing/workflow) for details.
-
-## Links
-
-- **Main Website**: [https://pullwise.ai](https://pullwise.ai)
-- **Documentation**: [https://docs.pullwise.ai](https://docs.pullwise.ai)
-- **GitHub**: [https://github.com/integralltech/pullwise-ai](https://github.com/integralltech/pullwise-ai)
-- **Discord**: [https://discord.gg/pullwise](https://discord.gg/pullwise)
-
-## License
-
-This documentation is licensed under the MIT License - see the [LICENSE](https://github.com/integralltech/pullwise-ai/blob/main/LICENSE) file for details.
+</div>
 
 ---
 
-**Pullwise** - The Open Code Review Platform
+## 🦉 What is Pullwise?
+
+Pullwise is an **open-source, self-hosted AI code review platform** that combines static analysis (SAST) with large language models (LLMs) to provide intelligent, automated code reviews.
+
+### 🎯 The Problem
+
+Code reviews are essential for software quality, but they're:
+- **Time-consuming** - Senior developers spend hours reviewing PRs
+- **Inconsistent** - Different reviewers catch different issues
+- **Expensive** - Enterprise tools cost thousands per month
+- **Vendor lock-in** - Proprietary solutions trap your data
+
+### ✨ The Solution
+
+**Pullwise Community Edition (MIT Licensed):**
+- **Free forever** - No credit card, no time limits
+- **Self-hosted** - Your code never leaves your infrastructure
+- **AI-Powered** - Multi-model LLM support (GPT-4, Claude, local models)
+- **SAST Integration** - SonarQube, ESLint, Checkstyle, PMD, SpotBugs
+- **Auto-Fix** - One-click apply suggestions
+- **200+ Plugins** - Community-driven extensions
+
+---
+
+## 🚀 Quick Start
+
+### 5-Minute Setup with Docker
+
+```bash
+# Clone the repository
+git clone https://github.com/integralltech/pullwise-ai.git
+cd pullwise-ai/frontend
+
+# Download the docker-compose.yml
+wget https://pullwise.ai/docker-compose.yml
+
+# Start all services
+docker-compose up -d
+
+# Access Pullwise
+open http://localhost:8080
+```
+
+That's it! Pullwise is now running with:
+- PostgreSQL database
+- Redis cache
+- Ollama (local LLM)
+- Pullwise CE
+
+### System Requirements
+
+- **Docker** 20.10+ and Docker Compose 2.0+
+- **2 GB RAM** minimum (4 GB recommended)
+- **10 GB** disk space
+- **Linux**, **macOS**, or **Windows** with WSL2
+
+---
+
+## 💎 Editions
+
+Pullwise follows the **GitLab open-core model**:
+
+| Feature | Community Edition | Professional | Enterprise | Enterprise Plus |
+|---------|------------------|-------------|------------|------------------|
+| **Price** | **FREE** | $49/dev/mo | $99/dev/mo | $149/dev/mo |
+| **License** | MIT | Proprietary | Proprietary | Proprietary |
+| **Users** | 5 | 50 | Unlimited | Unlimited |
+| **Organizations** | 1 | 3 | Unlimited | Unlimited |
+| **Pipeline** | 2-pass | 4-pass | 4-pass | 4-pass |
+| **Code Graph** | ❌ | ✅ | ✅ | ✅ |
+| **SSO/SAML** | ❌ | ✅ | ✅ | ✅ |
+| **RBAC** | ❌ | Basic | Advanced | Advanced |
+| **Audit Logs** | ❌ | 30 days | 1 year | Custom |
+| **Air-Gapped** | ❌ | ❌ | ✅ | ✅ |
+| **SLA** | Community | 48h | 4h | 1h |
+| **Source Access** | Core | ❌ | ❌ | ✅ |
+
+[→ Compare all editions](https://pullwise.ai/#comparison)
+
+---
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      PULLWISE PLATFORM                       │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐ │
+│  │   Frontend   │    │   Backend    │    │  PostgreSQL  │ │
+│  │   (React)    │◀──▶│ (Spring Boot)│◀──▶│  + pgvector  │ │
+│  └──────────────┘    └──────────────┘    └──────────────┘ │
+│         │                    │                    │         │
+│         │                    ├──▶ Redis (cache)   │         │
+│         │                    ├──▶ RabbitMQ (jobs) │         │
+│         │                    └──▶ LLM Providers   │         │
+│         │                         ├─ OpenRouter   │         │
+│         │                         ├─ Ollama (local)│         │
+│         │                         └─ Custom       │         │
+│         │                                                    │
+│         ▼                                                    │
+│  GitHub / GitLab / BitBucket (Webhooks + API)               │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🔑 Key Features
+
+### 🔍 Hybrid SAST + AI Reviews
+
+Pullwise combines the best of both worlds:
+
+1. **Static Analysis** (parallel execution):
+   - SonarQube (bugs, vulnerabilities, code smells)
+   - ESLint (JavaScript/TypeScript)
+   - Checkstyle (Java)
+   - PMD (anti-patterns)
+   - SpotBugs (bug patterns)
+
+2. **AI Review** (with full context):
+   - SAST results as baseline
+   - Code graph analysis
+   - Historical PR data
+   - Custom team instructions
+
+3. **Smart Consolidation**:
+   - Deduplicates similar issues
+   - Prioritizes by severity
+   - Formats actionable comments
+
+### 🧠 Multi-Model LLM Router
+
+- **Cloud models**: GPT-4, Claude Sonnet, Gemini Pro via OpenRouter
+- **Local models**: Llama 3, Mistral, Gemma via Ollama
+- **Cost optimization**: Auto-routes to cheapest model for task
+- **Fallback**: Graceful degradation when models fail
+
+### 🔌 Plugin System
+
+200+ community plugins extending:
+- Language linters (Rust, Go, Python, PHP)
+- Framework-specific rules (Laravel, Django, Spring)
+- Custom checks for your codebase
+- [→ Plugin Marketplace](https://pullwise.ai/plugins)
+
+### ⚡ Auto-Fix
+
+- One-click apply for AI suggestions
+- Safe preview before applying
+- Rollback support
+- Batch operations
+
+---
+
+## 🌍 Community
+
+Join **10,000+ developers** using Pullwise:
+
+- **5,000+** GitHub Stars
+- **10,000+** Docker Pulls
+- **200+** Community Plugins
+- **1,000+** Discord Members
+
+[→ Join Discord](https://discord.gg/pullwise)
+
+---
+
+## 📖 Documentation
+
+- [Getting Started Guide](https://docs.pullwise.ai/getting-started)
+- [Installation Guide](https://docs.pullwise.ai/installation)
+- [Configuration](https://docs.pullwise.ai/configuration)
+- [Plugin Development](https://docs.pullwise.ai/plugins)
+- [API Reference](https://docs.pullwise.ai/api)
+
+---
+
+## 🚢 Deployment
+
+### Docker (Recommended)
+
+```bash
+docker-compose up -d
+```
+
+### Kubernetes
+
+```bash
+kubectl apply -f k8s/community-edition/
+```
+
+### Helm Chart
+
+```bash
+helm repo add pullwise https://charts.pullwise.ai
+helm install pullwise pullwise/pullwise-ce
+```
+
+---
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md).
+
+**Areas where we need help:**
+- Language integrations (Rust, Go, Python, PHP)
+- Plugin development
+- Documentation improvements
+- Bug reports and testing
+- [→ Good First Issues](https://github.com/integralltech/pullwise-ai/issues?q=label%3A%22good+first+issue%22+is%3Aopen+is%3Aissue)
+
+---
+
+## 📜 License
+
+**Community Edition** - [MIT License](LICENSE)
+
+Free to use, modify, and distribute. Forever.
+
+---
+
+## 🙏 Acknowledgments
+
+Built with inspiration from:
+- **GitLab** - Open-core business model
+- **SonarQube** - SAST foundation
+- **CodeRabbit** - AI review patterns
+- **Open Source Community** - Tools and libraries
+
+---
+
+<div align="center">
+
+  **[⬆ Back to Top](#pullwise---the-open-code-review-platform)**
+
+  Made with ❤️ by the Pullwise community
+
+  **pullwise.ai** • [@pullwise](https://twitter.com/pullwise) • [hello@pullwise.ai](mailto:hello@pullwise.ai)
+
+</div>

@@ -1,0 +1,198 @@
+spring:
+  application:
+    name: pullwise-api
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://192.168.1.110:5444/pullwise?ssl=false&serverTimezone=America/Sao_Paulo}
+    username: ${DB_USER:admin}
+    password: ${DB_PASSWORD:Rapidex@727204}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        show_sql: false
+      # pgvector support for RAG
+      types:
+        print:
+          loader: com.pgvector PGVectorType
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+  # External Redis
+  data:
+    redis:
+      host: ${REDIS_HOST:192.168.1.110}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
+      timeout: ${REDIS_TIMEOUT:5000}
+      lettuce:
+        pool:
+          max-active: ${REDIS_POOL_MAX_ACTIVE:20}
+          max-idle: ${REDIS_POOL_MAX_IDLE:10}
+          min-idle: ${REDIS_POOL_MIN_IDLE:2}
+          max-wait: ${REDIS_POOL_MAX_WAIT:2000}
+
+  # Artemis/ActiveMQ
+  activemq:
+    broker-url: ${ARTEMIS_BROKER_URL:tcp://192.168.1.110:61616}
+    user: ${ARTEMIS_BROKER_USERNAME:admin}
+    password: ${ARTEMIS_BROKER_PASSWORD:admin}
+
+  jms:
+    listener:
+      acknowledge-mode: auto
+
+# Security
+security:
+  jwt:
+    secret: ${JWT_SECRET:pullwise-secret-key-change-in-production}
+    expiration: 86400000
+  oauth2:
+    github:
+      client-id: ${GITHUB_CLIENT_ID}
+      client-secret: ${GITHUB_CLIENT_SECRET}
+
+# Integrations
+integrations:
+  github:
+    app-id: ${GITHUB_APP_ID:}
+    private-key: ${GITHUB_APP_PRIVATE_KEY:}
+    webhook-secret: ${GITHUB_WEBHOOK_SECRET:}
+    client-id: ${GITHUB_CLIENT_ID:}
+    client-secret: ${GITHUB_CLIENT_SECRET:}
+
+  sonarqube:
+    url: ${SONARQUBE_URL:}
+    token: ${SONARQUBE_TOKEN:}
+
+  openrouter:
+    enabled: true
+    api-key: ${OPENROUTER_API_KEY:}
+    base-url: https://openrouter.ai/api/v1
+    default-model: anthropic/claude-3.5-sonnet
+
+  ollama:
+    enabled: ${OLLAMA_ENABLED:false}
+    base-url: ${OLLAMA_URL:http://localhost:11434}
+    model: gemma2:9b
+
+# V2: Multi-Model LLM Router Configuration
+llm:
+  router:
+    enabled: true
+    strategy: cost-optimized  # cost-optimized | quality-first | balanced
+    default-model: anthropic/claude-3.5-sonnet
+    fallback-model: google/gemma-3-4b-it:free
+
+  models:
+    # Complex reasoning (bugs, refactoring)
+    o3-mini:
+      provider: openrouter
+      model-id: openai/o3-mini
+      max-tokens: 4096
+      cost-per-1k-tokens: 0.002
+      use-cases:
+        - COMPLEX_REASONING
+        - BUG_DETECTION
+        - REFACTORING
+
+    # Architecture & security
+    claude-3.5-sonnet:
+      provider: openrouter
+      model-id: anthropic/claude-3.5-sonnet
+      max-tokens: 8192
+      cost-per-1k-tokens: 0.003
+      use-cases:
+        - ARCHITECTURE_REVIEW
+        - SECURITY_ANALYSIS
+        - CODE_EXPLANATION
+
+    # Summarization & QA
+    gpt-4.1-turbo:
+      provider: openrouter
+      model-id: openai/gpt-4.1-turbo
+      max-tokens: 4096
+      cost-per-1k-tokens: 0.001
+      use-cases:
+        - SUMMARIZATION
+        - QA
+        - METADATA_GENERATION
+
+    # Fast local analysis
+    gemma-3-4b:
+      provider: ollama
+      model-id: gemma3:4b
+      max-tokens: 2048
+      cost-per-1k-tokens: 0.0
+      use-cases:
+        - FAST_LINT
+        - STYLE_CHECK
+        - PRE_FILTER
+
+  cost-tracking:
+    enabled: true
+    daily-budget: ${LLM_DAILY_BUDGET:50.0}
+    alert-threshold: 0.8
+
+# Pullwise LLM Configuration (LangChain4j)
+pullwise:
+  llm:
+    enabled: true
+    provider: OPENROUTER  # OPENROUTER, OLLAMA, OPENAI, ANTHROPIC, DEEPSEEK, GEMMA
+    model: anthropic/claude-3.5-sonnet
+    base-url: https://openrouter.ai/api/v1
+    api-key: ${OPENROUTER_API_KEY:}
+    temperature: 0.7
+    max-tokens: 4096
+    timeout: 120s
+    max-retries: 3
+    log-requests: false
+    log-responses: false
+
+# Planos
+plans:
+  free:
+    max-repos: 3
+    max-reviews-per-month: 50
+    llm-provider: shared
+  pro:
+    max-repos: -1
+    max-reviews-per-month: -1
+    llm-provider: openrouter
+  enterprise:
+    max-repos: -1
+    max-reviews-per-month: -1
+    llm-provider: ollama
+
+# Server
+server:
+  port: ${SERVER_PORT:8080}
+  error:
+    include-message: always
+    include-binding-errors: always
+
+# Logging
+logging:
+  level:
+    com.pullwise: DEBUG
+    org.springframework.security: INFO
+
+# STOMP WebSocket (Artemis)
+vendax:
+  stomp:
+    host: ${VENDAX_STOMP_HOST:192.168.1.110}
+    port: ${VENDAX_STOMP_PORT:61613}
+    username: ${VENDAX_STOMP_USERNAME:admin}
+    password: ${VENDAX_STOMP_PASSWORD:admin}

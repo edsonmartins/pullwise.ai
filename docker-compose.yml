@@ -1,0 +1,185 @@
+version: '3.9'
+
+services:
+  # PostgreSQL Database com pgvector
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: pullwise-postgres
+    environment:
+      POSTGRES_DB: pullwise
+      POSTGRES_USER: pullwise
+      POSTGRES_PASSWORD: pullwise_dev_2024
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/src/main/resources/db/migration:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pullwise"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - pullwise-network
+
+  # Redis para cache e filas
+  redis:
+    image: redis:7-alpine
+    container_name: pullwise-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - pullwise-network
+
+  # RabbitMQ para filas de processamento
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: pullwise-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: pullwise
+      RABBITMQ_DEFAULT_PASS: pullwise_dev_2024
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - pullwise-network
+
+  # Backend Spring Boot
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: pullwise-backend
+    environment:
+      SPRING_PROFILES_ACTIVE: dev,docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/pullwise
+      SPRING_DATASOURCE_USERNAME: pullwise
+      SPRING_DATASOURCE_PASSWORD: pullwise_dev_2024
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: pullwise
+      SPRING_RABBITMQ_PASSWORD: pullwise_dev_2024
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-sk-test-key}
+      JIRA_URL: ${JIRA_URL:-}
+      JIRA_USERNAME: ${JIRA_USERNAME:-}
+      JIRA_API_TOKEN: ${JIRA_API_TOKEN:-}
+      LINEAR_API_KEY: ${LINEAR_API_KEY:-}
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - pullwise-network
+
+  # Frontend Vite
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: pullwise-frontend
+    environment:
+      VITE_API_URL: http://localhost:8080/api
+      VITE_WS_URL: ws://localhost:8080/ws
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - pullwise-network
+
+  # Prometheus para monitoramento
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: pullwise-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - pullwise-network
+    profiles:
+      - monitoring
+
+  # Grafana para visualização de métricas
+  grafana:
+    image: grafana/grafana:latest
+    container_name: pullwise-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: pullwise_admin_2024
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./docker/grafana/datasources:/etc/grafana/provisioning/datasources
+    depends_on:
+      - prometheus
+    networks:
+      - pullwise-network
+    profiles:
+      - monitoring
+
+  # Jaeger para tracing distribuído
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: pullwise-jaeger
+    ports:
+      - "5775:5775/udp"
+      - "6831:6831/udp"
+      - "6832:6832/udp"
+      - "5778:5778"
+      - "16686:16686"
+      - "14268:14268"
+      - "14250:14250"
+      - "9411:9411"
+    environment:
+      COLLECTOR_ZIPKIN_HOST_PORT: :9411
+    networks:
+      - pullwise-network
+    profiles:
+      - monitoring
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  pullwise-network:
+    driver: bridge

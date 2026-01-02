@@ -1,0 +1,25 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'pullwise-monitor'
+
+scrape_configs:
+  # Spring Boot Actuator metrics
+  - job_name: 'pullwise-backend'
+    static_configs:
+      - targets: ['backend:8080']
+    metrics_path: '/actuator/prometheus'
+
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+rule_files:
+  # - "alerts.yml"

@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run dev:*)",
+      "Bash(cat:*)",
+      "Bash(mvn compile:*)",
+      "Bash(mvn:*)",
+      "Bash(timeout:*)",
+      "Bash(PGPASSWORD='Rapidex@727204' psql:*)",
+      "Bash(curl:*)",
+      "Bash(find:*)",
+      "Bash(pnpm install:*)",
+      "Bash(pnpm config list:*)",
+      "Bash(npm view:*)",
+      "Bash(npm search:*)",
+      "Bash(pnpm run build:*)",
+      "Bash(tree:*)",
+      "Bash(mkdir:*)",
+      "Bash(PORT=3003 npm run start:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
+    ]
+  }
+}

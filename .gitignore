@@ -1,9 +1,55 @@
-node_modules
-.build
-.docusaurus
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+.build/
+.docusaurus/
+.dist/
+target/
+out/
+
+# Logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment
 .env
 .env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
 .DS_Store
-dist
-.cache
+Thumbs.db
+
+# Cache
+.cache/
+.parcel-cache/
+
+# Java
+*.class
+*.jar
+*.war
+*.ear
+.mvn/
+mvnw
+mvnw.cmd
+
+# Testing
+coverage/
+.nyc_output/
+
+# Temporary
+*.tmp
+*.temp
