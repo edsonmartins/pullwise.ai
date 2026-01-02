@@ -18,21 +18,21 @@ const config: Config = {
     mermaid: true,
   },
 
-  // i18n: {
-  //   defaultLocale: 'en',
-  //   locales: ['en', 'pt', 'es'],
-  //   localeConfigs: {
-  //     en: {
-  //       label: 'English',
-  //     },
-  //     pt: {
-  //       label: 'Português',
-  //     },
-  //     es: {
-  //       label: 'Español',
-  //     },
-  //   },
-  // },
+  i18n: {
+    defaultLocale: 'en',
+    locales: ['en', 'pt', 'es'],
+    localeConfigs: {
+      en: {
+        label: 'English',
+      },
+      pt: {
+        label: 'Português',
+      },
+      es: {
+        label: 'Español',
+      },
+    },
+  },
 
   onBrokenLinks: 'throw',
   onBrokenMarkdownLinks: 'warn',
@@ -102,10 +102,10 @@ const config: Config = {
           className: 'header-github-link',
           'aria-label': 'GitHub repository',
         },
-        // {
-        //   type: 'localeDropdown',
-        //   position: 'right',
-        // },
+        {
+          type: 'localeDropdown',
+          position: 'right',
+        },
       ],
     },
     footer: {

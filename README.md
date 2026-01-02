@@ -20,7 +20,7 @@ Pullwise is an open-source, self-hosted AI code review platform that combines st
 
 ### Architecture
 
-![Pullwise Architecture](./static/img/arquitetura.png)
+![Pullwise Architecture](../images/arquitetura.png)
 
 ## This Documentation Project
 
