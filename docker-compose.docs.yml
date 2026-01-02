@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  docs:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pullwise-docs
+    ports:
+      - "${DOCS_PORT:-8080}:8080"
+    restart: unless-stopped
+    networks:
+      - pullwise-network
+    environment:
+      - NGINX_HOST=${DOCS_HOST:-docs.pullwise.ai}
+    labels:
+      - "com.pullwise.service=docs"
+      - "com.pullwise.description=Pullwise Documentation"
+
+  # Optional: Nginx reverse proxy for SSL termination
+  nginx-proxy:
+    image: nginx:alpine
+    container_name: pullwise-docs-proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx-proxy.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - docs
+    restart: unless-stopped
+    networks:
+      - pullwise-network
+    profiles:
+      - with-proxy
+
+networks:
+  pullwise-network:
+    driver: bridge
+    name: pullwise-docs-network

@@ -1,0 +1,425 @@
+/**
+ * Copyright (c) Pullwise
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* ===================================
+   CSS Variables
+   =================================== */
+
+:root {
+  --ifm-color-primary: #9333ea;
+  --ifm-color-primary-dark: #7e22ce;
+  --ifm-color-primary-darker: #6b21a8;
+  --ifm-color-primary-darkest: #581c87;
+  --ifm-color-primary-light: #a855f7;
+  --ifm-color-primary-lighter: #c084fc;
+  --ifm-color-primary-lightest: #d8b4fe;
+
+  --ifm-font-family-base: 'Inter', system-ui, -apple-system, sans-serif;
+  --ifm-font-family-monospace: 'JetBrains Mono', 'Fira Code', monospace;
+
+  --ifm-code-font-size: 95%;
+  --ifm-heading-font-weight: 600;
+
+  --docs-pullwise-purple: #9333ea;
+  --docs-pullwise-purple-light: #a855f7;
+  --docs-pullwise-green: #22c55e;
+  --docs-pullwise-blue: #3b82f6;
+  --docs-pullwise-orange: #f97316;
+
+  --docs-gradient-purple: linear-gradient(135deg, #9333ea 0%, #7c3aed 100%);
+  --docs-gradient-green: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  --docs-gradient-blue: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  --docs-gradient-orange: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+}
+
+/* ===================================
+   Dark Mode
+   =================================== */
+
+[data-theme='dark'] {
+  --ifm-background-surface-color: #1a1a1a;
+  --ifm-background-color: #0f0f0f;
+  --ifm-card-background-color: #1a1a1a;
+  --docs-pullwise-purple: #a855f7;
+  --docs-pullwise-green: #4ade80;
+  --docs-pullwise-blue: #60a5fa;
+  --docs-pullwise-orange: #fb923c;
+}
+
+/* ===================================
+   Global Styles
+   =================================== */
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--ifm-font-family-base);
+}
+
+/* ===================================
+   Typography
+   =================================== */
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: var(--ifm-heading-font-weight);
+  letter-spacing: -0.02em;
+}
+
+h1 {
+  font-size: 2.5rem;
+  margin-bottom: 1.5rem;
+}
+
+h2 {
+  font-size: 2rem;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--ifm-color-emphasis-300);
+}
+
+h3 {
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+/* ===================================
+   Navbar
+   =================================== */
+
+.navbar {
+  border-bottom: 1px solid var(--ifm-color-emphasis-200);
+  backdrop-filter: blur(10px);
+}
+
+.navbar__logo {
+  border-radius: 8px;
+}
+
+.header-github-link:hover {
+  opacity: 0.6;
+}
+
+.header-github-link::before {
+  content: '';
+  width: 24px;
+  height: 24px;
+  display: flex;
+  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12'/%3E%3C/svg%3E")
+    no-repeat;
+}
+
+/* ===================================
+   Hero / Landing
+   =================================== */
+
+.hero {
+  padding: 4rem 0;
+  text-align: center;
+  background: var(--docs-gradient-purple);
+  color: white;
+  border-radius: 1rem;
+  margin-bottom: 2rem;
+}
+
+.hero__title {
+  font-size: 3rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  color: white;
+}
+
+.hero__subtitle {
+  font-size: 1.25rem;
+  opacity: 0.9;
+  margin-bottom: 2rem;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.hero__buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* ===================================
+   Feature Cards
+   =================================== */
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin: 2rem 0;
+}
+
+.feature-card {
+  padding: 1.5rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  background: var(--ifm-card-background-color);
+  transition: all 0.2s ease;
+}
+
+.feature-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  border-color: var(--docs-pullwise-purple);
+}
+
+.feature-card__icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1rem;
+  font-size: 1.5rem;
+  background: var(--docs-gradient-purple);
+  color: white;
+}
+
+.feature-card__title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.feature-card__description {
+  color: var(--ifm-color-emphasis-600);
+  line-height: 1.6;
+}
+
+/* ===================================
+   Code Blocks
+   =================================== */
+
+.theme-code-block {
+  border-radius: 0.5rem;
+  border: 1px solid var(--ifm-color-emphasis-200);
+}
+
+.theme-code-block-highlighted-line {
+  background-color: rgba(147, 51, 234, 0.1);
+  display: block;
+  margin: 0 -1rem;
+  padding: 0 1rem;
+}
+
+[data-theme='dark'] .theme-code-block-highlighted-line {
+  background-color: rgba(168, 85, 247, 0.15);
+}
+
+/* Inline code */
+code {
+  padding: 0.2em 0.4em;
+  margin: 0;
+  font-size: 85%;
+  background-color: rgba(147, 51, 234, 0.1);
+  border-radius: 6px;
+  font-family: var(--ifm-font-family-monospace);
+}
+
+[data-theme='dark'] code {
+  background-color: rgba(168, 85, 247, 0.2);
+}
+
+/* ===================================
+   Admonitions
+   =================================== */
+
+.admonition {
+  border-radius: 0.5rem;
+  border-left: 4px solid;
+  margin: 1.5rem 0;
+}
+
+.admonition-heading {
+  font-weight: 600;
+}
+
+.admonition-note {
+  --ifm-admonition-background-color: rgba(59, 130, 246, 0.1);
+  --ifm-admonition-border-color: var(--docs-pullwise-blue);
+}
+
+.admonition-tip {
+  --ifm-admonition-background-color: rgba(34, 197, 94, 0.1);
+  --ifm-admonition-border-color: var(--docs-pullwise-green);
+}
+
+.admonition-warning {
+  --ifm-admonition-background-color: rgba(249, 115, 22, 0.1);
+  --ifm-admonition-border-color: var(--docs-pullwise-orange);
+}
+
+.admonition-danger {
+  --ifm-admonition-background-color: rgba(239, 68, 68, 0.1);
+  --ifm-admonition-border-color: #ef4444;
+}
+
+/* ===================================
+   Tables
+   =================================== */
+
+table {
+  border-radius: 0.5rem;
+  overflow: hidden;
+  border: 1px solid var(--ifm-color-emphasis-200);
+}
+
+th {
+  background: var(--ifm-color-emphasis-100);
+  font-weight: 600;
+}
+
+[data-theme='dark'] th {
+  background: var(--ifm-color-emphasis-200);
+}
+
+/* ===================================
+   Tabs
+   =================================== */
+
+.tabs {
+  border-bottom: 2px solid var(--ifm-color-emphasis-200);
+}
+
+.tabs__item {
+  color: var(--ifm-color-emphasis-700);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+}
+
+.tabs__item--active {
+  color: var(--docs-pullwise-purple);
+  border-bottom-color: var(--docs-pullwise-purple);
+}
+
+/* ===================================
+   Sidebar
+   =================================== */
+
+/* Sidebar styling using Docusaurus default variables */
+.menu__link--active:not(.menu__link--sublist) {
+  background: var(--ifm-color-primary);
+  color: #fff;
+}
+
+/* ===================================
+   Footer
+   =================================== */
+
+.footer {
+  border-top: 1px solid var(--ifm-color-emphasis-200);
+  margin-top: 4rem;
+}
+
+.footer__logo {
+  border-radius: 12px;
+}
+
+.footer__link-item {
+  transition: color 0.2s;
+}
+
+.footer__link-item:hover {
+  color: var(--docs-pullwise-purple) !important;
+}
+
+/* ===================================
+   API Reference with Scalar
+   =================================== */
+
+.scalar-api-reference {
+  --scalar-font-family: var(--ifm-font-family-base);
+}
+
+/* ===================================
+   Responsive
+   =================================== */
+
+@media (max-width: 768px) {
+  h1 {
+    font-size: 2rem;
+  }
+
+  h2 {
+    font-size: 1.5rem;
+  }
+
+  .hero__title {
+    font-size: 2rem;
+  }
+
+  .feature-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ===================================
+   Utility Classes
+   =================================== */
+
+.text-center {
+  text-align: center;
+}
+
+.text-gradient {
+  background: var(--docs-gradient-purple);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 9999px;
+  background: var(--docs-gradient-purple);
+  color: white;
+}
+
+.badge--green {
+  background: var(--docs-gradient-green);
+}
+
+.badge--blue {
+  background: var(--docs-gradient-blue);
+}
+
+.badge--orange {
+  background: var(--docs-gradient-orange);
+}
+
+/* ===================================
+   Print Styles
+   =================================== */
+
+@media print {
+  .navbar,
+  .sidebar,
+  .footer,
+  .menu,
+  .pagination-nav {
+    display: none !important;
+  }
+
+  main {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+}

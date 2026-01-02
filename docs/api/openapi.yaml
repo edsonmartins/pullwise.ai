@@ -1,0 +1,933 @@
+openapi: 3.0.3
+info:
+  title: Pullwise API
+  description: |
+    API for the Pullwise platform - AI-powered code review system.
+
+    ## Authentication
+
+    Most endpoints require authentication via JWT Bearer token. Obtain a token via GitHub OAuth2.
+
+    ## Rate Limiting
+
+    - 100 requests per minute per user
+    - 20 requests burst
+
+    ## Versioning
+
+    Current API version: v1.0
+  version: 1.0.0
+  contact:
+    name: Pullwise API Support
+    url: https://pullwise.ai
+    email: api@pullwise.ai
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.pullwise.ai
+    description: Production server
+  - url: https://staging-api.pullwise.ai
+    description: Staging server
+  - url: http://localhost:8080
+    description: Local development server
+
+tags:
+  - name: Authentication
+    description: User authentication and authorization
+  - name: Organizations
+    description: Organization management
+  - name: Projects
+    description: Project management
+  - name: Reviews
+    description: Code review operations
+  - name: Issues
+    description: Issue findings from reviews
+  - name: Auto-Fix
+    description: Automatic code fix generation
+  - name: Analytics
+    description: Metrics and reporting
+  - name: Billing
+    description: Subscription and billing
+  - name: Webhooks
+    description: External webhook integration
+  - name: Health
+    description: Health check endpoints
+
+security:
+  - bearerAuth: []
+
+paths:
+  /api/auth/me:
+    get:
+      tags: [Authentication]
+      summary: Get current user
+      description: Retrieve information about the authenticated user
+      responses:
+        '200':
+          description: User information retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDTO'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/auth/callback/github:
+    post:
+      tags: [Authentication]
+      summary: GitHub OAuth callback
+      description: Handle OAuth2 callback from GitHub
+      security: []
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication failed
+
+  /api/auth/logout:
+    post:
+      tags: [Authentication]
+      summary: Logout user
+      description: Invalidate the current session
+      responses:
+        '204':
+          description: Logout successful
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/auth/refresh:
+    post:
+      tags: [Authentication]
+      summary: Refresh JWT token
+      description: Obtain a new JWT token using refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invalid refresh token
+
+  /api/organizations:
+    get:
+      tags: [Organizations]
+      summary: List user organizations
+      description: Get all organizations the user belongs to
+      responses:
+        '200':
+          description: Organizations retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OrganizationDTO'
+
+  /api/organizations/{id}:
+    get:
+      tags: [Organizations]
+      summary: Get organization by ID
+      parameters:
+        - $ref: '#/components/parameters/OrganizationId'
+      responses:
+        '200':
+          description: Organization retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationDTO'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/organizations/{id}/projects:
+    get:
+      tags: [Organizations]
+      summary: List organization projects
+      parameters:
+        - $ref: '#/components/parameters/OrganizationId'
+      responses:
+        '200':
+          description: Projects retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProjectDTO'
+
+  /api/organizations/{id}/usage:
+    get:
+      tags: [Organizations]
+      summary: Get organization usage stats
+      parameters:
+        - $ref: '#/components/parameters/OrganizationId'
+      responses:
+        '200':
+          description: Usage stats retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageStatsDTO'
+
+  /api/projects:
+    get:
+      tags: [Projects]
+      summary: List user projects
+      responses:
+        '200':
+          description: Projects retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProjectDTO'
+    post:
+      tags: [Projects]
+      summary: Create new project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectRequest'
+      responses:
+        '201':
+          description: Project created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectDTO'
+        '400':
+          description: Invalid request
+
+  /api/projects/{id}:
+    get:
+      tags: [Projects]
+      summary: Get project by ID
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Project retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectDTO'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Projects]
+      summary: Update project
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProjectRequest'
+      responses:
+        '200':
+          description: Project updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectDTO'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Projects]
+      summary: Delete project
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '204':
+          description: Project deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/reviews:
+    get:
+      tags: [Reviews]
+      summary: List reviews
+      parameters:
+        - name: projectId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [QUEUED, CLONING, ANALYZING, CONSOLIDATING, COMPLETED, FAILED, CANCELLED]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Reviews retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  content:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ReviewDTO'
+                  totalElements:
+                    type: integer
+                  totalPages:
+                    type: integer
+    post:
+      tags: [Reviews]
+      summary: Create new review
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReviewRequest'
+      responses:
+        '201':
+          description: Review created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewDTO'
+
+  /api/reviews/{id}:
+    get:
+      tags: [Reviews]
+      summary: Get review by ID
+      parameters:
+        - $ref: '#/components/parameters/ReviewId'
+      responses:
+        '200':
+          description: Review retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewDTO'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/reviews/{id}/issues:
+    get:
+      tags: [Reviews]
+      summary: List review issues
+      parameters:
+        - $ref: '#/components/parameters/ReviewId'
+        - name: severity
+          in: query
+          schema:
+            type: string
+            enum: [CRITICAL, HIGH, MEDIUM, LOW]
+      responses:
+        '200':
+          description: Issues retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IssueDTO'
+
+  /api/reviews/{id}/cancel:
+    post:
+      tags: [Reviews]
+      summary: Cancel review
+      parameters:
+        - $ref: '#/components/parameters/ReviewId'
+      responses:
+        '204':
+          description: Review cancelled successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/reviews/issues/{issueId}/false-positive:
+    post:
+      tags: [Reviews]
+      summary: Mark issue as false positive
+      parameters:
+        - $ref: '#/components/parameters/IssueId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        '204':
+          description: Issue marked as false positive
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/autofix/generate:
+    post:
+      tags: [Auto-Fix]
+      summary: Generate fix suggestion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FixGenerateRequest'
+      responses:
+        '200':
+          description: Fix generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FixGenerationResponse'
+
+  /api/autofix/apply:
+    post:
+      tags: [Auto-Fix]
+      summary: Apply fix suggestion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FixApplyRequest'
+      responses:
+        '200':
+          description: Fix applied successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FixApplicationResponse'
+
+  /api/autofix/{id}/approve:
+    post:
+      tags: [Auto-Fix]
+      summary: Approve fix suggestion
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Fix approved successfully
+
+  /api/autofix/{id}/reject:
+    post:
+      tags: [Auto-Fix]
+      summary: Reject fix suggestion
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Fix rejected successfully
+
+  /api/analytics/organizations/{organizationId}/metrics:
+    get:
+      tags: [Analytics]
+      summary: Get organization metrics
+      parameters:
+        - $ref: '#/components/parameters/OrganizationId'
+        - name: start
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: end
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Metrics retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalReviews:
+                    type: integer
+                  totalIssues:
+                    type: integer
+                  criticalIssues:
+                    type: integer
+                  highIssues:
+                    type: integer
+                  mediumIssues:
+                    type: integer
+                  lowIssues:
+                    type: integer
+
+  /api/analytics/organizations/{organizationId}/review-trend:
+    get:
+      tags: [Analytics]
+      summary: Get review trend
+      parameters:
+        - $ref: '#/components/parameters/OrganizationId'
+        - name: months
+          in: query
+          schema:
+            type: integer
+            default: 6
+      responses:
+        '200':
+          description: Trend data retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    month:
+                      type: string
+                    count:
+                      type: integer
+
+  /api/billing/prices:
+    get:
+      tags: [Billing]
+      summary: Get available pricing plans
+      security: []
+      responses:
+        '200':
+          description: Pricing retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  community:
+                    type: object
+                  professional:
+                    type: object
+                  enterprise:
+                    type: object
+
+  /webhooks/github:
+    post:
+      tags: [Webhooks]
+      summary: GitHub webhook handler
+      description: Handle incoming webhooks from GitHub
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '202':
+          description: Webhook accepted
+        '400':
+          description: Invalid webhook payload
+
+  /api/v2/health:
+    get:
+      tags: [Health]
+      summary: Health check
+      description: Check system health
+      security: []
+      responses:
+        '200':
+          description: System is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [UP, DOWN]
+                  components:
+                    type: object
+
+  /api/v2/health/ready:
+    get:
+      tags: [Health]
+      summary: Readiness probe
+      description: Check if system is ready to accept requests
+      security: []
+      responses:
+        '200':
+          description: System is ready
+        '503':
+          description: System is not ready
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token obtained via OAuth2 callback
+
+  parameters:
+    OrganizationId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+      description: Organization ID
+
+    ProjectId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+      description: Project ID
+
+    ReviewId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+      description: Review ID
+
+    IssueId:
+      name: issueId
+      in: path
+      required: true
+      schema:
+        type: integer
+      description: Issue ID
+
+  schemas:
+    UserDTO:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        avatarUrl:
+          type: string
+          format: uri
+        createdAt:
+          type: string
+          format: date-time
+
+    AuthResponse:
+      type: object
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        tokenType:
+          type: string
+          default: Bearer
+        expiresIn:
+          type: integer
+        user:
+          $ref: '#/components/schemas/UserDTO'
+
+    OrganizationDTO:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        edition:
+          type: string
+          enum: [COMMUNITY, PROFESSIONAL, ENTERPRISE]
+        createdAt:
+          type: string
+          format: date-time
+
+    ProjectDTO:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        repositoryUrl:
+          type: string
+          format: uri
+        defaultBranch:
+          type: string
+          default: main
+        organizationId:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateProjectRequest:
+      type: object
+      required: [name, repositoryUrl]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 500
+        repositoryUrl:
+          type: string
+          format: uri
+        defaultBranch:
+          type: string
+          default: main
+
+    UpdateProjectRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 500
+
+    ReviewDTO:
+      type: object
+      properties:
+        id:
+          type: integer
+        projectId:
+          type: integer
+        pullRequestId:
+          type: string
+        pullRequestUrl:
+          type: string
+          format: uri
+        status:
+          type: string
+          enum: [QUEUED, CLONING, ANALYZING, CONSOLIDATING, COMPLETED, FAILED, CANCELLED]
+        totalIssues:
+          type: integer
+        criticalIssues:
+          type: integer
+        highIssues:
+          type: integer
+        mediumIssues:
+          type: integer
+        lowIssues:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+
+    CreateReviewRequest:
+      type: object
+      required: [projectId, pullRequestId]
+      properties:
+        projectId:
+          type: integer
+        pullRequestId:
+          type: string
+        branch:
+          type: string
+        commitSha:
+          type: string
+        runSast:
+          type: boolean
+          default: true
+        runLlm:
+          type: boolean
+          default: true
+
+    IssueDTO:
+      type: object
+      properties:
+        id:
+          type: integer
+        reviewId:
+          type: integer
+        severity:
+          type: string
+          enum: [CRITICAL, HIGH, MEDIUM, LOW]
+        type:
+          type: string
+          enum: [BUG, VULNERABILITY, CODE_SMELL, STYLE]
+        rule:
+          type: string
+        filePath:
+          type: string
+        startLine:
+          type: integer
+        endLine:
+          type: integer
+        message:
+          type: string
+        suggestion:
+          type: string
+        status:
+          type: string
+          enum: [PENDING, ACKNOWLEDGED, FALSE_POSITIVE, FIXED]
+        autoFixAvailable:
+          type: boolean
+
+    FixGenerateRequest:
+      type: object
+      required: [issueId]
+      properties:
+        issueId:
+          type: integer
+        model:
+          type: string
+          description: LLM model to use for fix generation
+
+    FixGenerationResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        issueId:
+          type: integer
+        originalCode:
+          type: string
+        fixedCode:
+          type: string
+        explanation:
+          type: string
+        confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+
+    FixApplyRequest:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: integer
+        createBranch:
+          type: boolean
+          default: true
+        branchName:
+          type: string
+
+    FixApplicationResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        branch:
+          type: string
+        commitSha:
+          type: string
+        pullRequestUrl:
+          type: string
+
+    UsageStatsDTO:
+      type: object
+      properties:
+        totalReviews:
+          type: integer
+        totalIssues:
+          type: integer
+        currentMonthReviews:
+          type: integer
+        currentMonthIssues:
+          type: integer
+        llmCost:
+          type: number
+          format: double
+
+  responses:
+    Unauthorized:
+      description: Unauthorized - Invalid or missing JWT token
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: Unauthorized
+              message:
+                type: string
+                example: Invalid or expired token
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: Not Found
+              message:
+                type: string
+                example: The requested resource was not found
+
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: Bad Request
+              message:
+                type: string
+              violations:
+                type: array
+                items:
+                  type: string
