@@ -1,4 +1,5 @@
 import { useLanguage } from "@/components/language-provider"
+import logo from "@/assets/logo.png"
 
 export default function Footer() {
   const { t } = useLanguage()
@@ -49,7 +50,7 @@ export default function Footer() {
 
         <div className="border-t border-gray-800 dark:border-gray-700 pt-8 flex flex-col md:flex-row items-center justify-between">
           <div className="flex items-center gap-2 mb-4 md:mb-0">
-            <span className="text-2xl">🦉</span>
+            <img src={logo} alt="Pullwise Logo" className="h-8 w-8" />
             <span className="text-white font-semibold">Pullwise</span>
           </div>
 

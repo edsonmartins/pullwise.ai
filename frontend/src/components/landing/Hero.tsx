@@ -4,6 +4,7 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { LanguageToggle } from "@/components/language-toggle"
 import { Link } from "react-router-dom"
 import { useLanguage } from "@/components/language-provider"
+import logo from "@/assets/logo.png"
 
 export default function Hero() {
   const { t } = useLanguage()
@@ -14,7 +15,7 @@ export default function Hero() {
       <nav className="container mx-auto px-6 mb-6 md:mb-8">
         <div className="flex items-center justify-between">
           <Link to="/landing" className="flex items-center gap-2">
-            <span className="text-3xl">🦉</span>
+            <img src={logo} alt="Pullwise Logo" className="h-10 w-10" />
             <span className="text-2xl font-bold text-gray-900 dark:text-white">Pullwise</span>
             <span className="ml-2 px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs font-semibold rounded">
               MIT Licensed
@@ -94,7 +95,7 @@ export default function Hero() {
           <div className="rounded-xl shadow-2xl overflow-hidden border border-gray-200 dark:border-gray-700">
             <div className="aspect-video bg-gradient-to-br from-purple-100 to-blue-100 dark:from-purple-900/30 dark:to-blue-900/30 flex items-center justify-center">
               <div className="text-center">
-                <span className="text-8xl mb-4 block animate-float">🦉</span>
+                <img src={logo} alt="Pullwise Logo" className="h-32 w-32 mx-auto mb-4 animate-float" />
                 <p className="text-gray-600 dark:text-gray-300 text-lg">{t.hero.demoTitle}</p>
                 <p className="text-gray-500 dark:text-gray-400 text-sm mt-2">{t.hero.demoSubtitle}</p>
               </div>

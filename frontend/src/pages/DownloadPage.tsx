@@ -2,6 +2,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Copy, Check, Download, Container, Github } from "lucide-react"
 import { Link } from "react-router-dom"
+import logo from "@/assets/logo.png"
 
 /**
  * DownloadPage component
@@ -95,7 +96,7 @@ volumes:
       {/* Header */}
       <nav className="container mx-auto px-6 py-6">
         <Link to="/landing" className="flex items-center gap-2">
-          <span className="text-3xl">🦉</span>
+          <img src={logo} alt="Pullwise Logo" className="h-10 w-10" />
           <span className="text-2xl font-bold text-gray-900 dark:text-white">Pullwise</span>
           <span className="ml-2 px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs font-semibold rounded">
             MIT Licensed

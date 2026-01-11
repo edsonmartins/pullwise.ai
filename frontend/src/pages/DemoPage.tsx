@@ -2,6 +2,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { ArrowRight, Check, Calendar, Users, Building2, Mail, MessageSquare } from "lucide-react"
 import { Link } from "react-router-dom"
+import logo from "@/assets/logo.png"
 
 /**
  * DemoPage component
@@ -97,7 +98,7 @@ export default function DemoPage() {
       {/* Header */}
       <nav className="container mx-auto px-6 py-6">
         <Link to="/landing" className="flex items-center gap-2">
-          <span className="text-3xl">🦉</span>
+          <img src={logo} alt="Pullwise Logo" className="h-10 w-10" />
           <span className="text-2xl font-bold text-gray-900 dark:text-white">Pullwise</span>
         </Link>
       </nav>
