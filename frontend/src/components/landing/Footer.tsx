@@ -50,7 +50,7 @@ export default function Footer() {
 
         <div className="border-t border-gray-800 dark:border-gray-700 pt-8 flex flex-col md:flex-row items-center justify-between">
           <div className="flex items-center gap-2 mb-4 md:mb-0">
-            <img src={logo} alt="Pullwise Logo" className="h-8 w-8" />
+            <img src={logo} alt="Pullwise Logo" className="h-10 w-10" />
             <span className="text-white font-semibold">Pullwise</span>
           </div>
 

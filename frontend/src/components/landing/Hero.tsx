@@ -15,7 +15,7 @@ export default function Hero() {
       <nav className="container mx-auto px-6 mb-6 md:mb-8">
         <div className="flex items-center justify-between">
           <Link to="/landing" className="flex items-center gap-2">
-            <img src={logo} alt="Pullwise Logo" className="h-10 w-10" />
+            <img src={logo} alt="Pullwise Logo" className="h-12 w-12" />
             <span className="text-2xl font-bold text-gray-900 dark:text-white">Pullwise</span>
             <span className="ml-2 px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs font-semibold rounded">
               MIT Licensed

@@ -98,7 +98,7 @@ export default function DemoPage() {
       {/* Header */}
       <nav className="container mx-auto px-6 py-6">
         <Link to="/landing" className="flex items-center gap-2">
-          <img src={logo} alt="Pullwise Logo" className="h-10 w-10" />
+          <img src={logo} alt="Pullwise Logo" className="h-12 w-12" />
           <span className="text-2xl font-bold text-gray-900 dark:text-white">Pullwise</span>
         </Link>
       </nav>
