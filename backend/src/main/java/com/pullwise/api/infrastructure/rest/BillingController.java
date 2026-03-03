@@ -1,6 +1,7 @@
 package com.pullwise.api.infrastructure.rest;
 
 import com.pullwise.api.application.dto.response.SubscriptionDTO;
+import com.pullwise.api.application.service.audit.Auditable;
 import com.pullwise.api.application.service.billing.StripeService;
 import com.pullwise.api.domain.enums.PlanType;
 import com.pullwise.api.domain.model.Subscription;
@@ -70,6 +71,7 @@ public class BillingController {
      * Inicia checkout para upgrade de plano.
      */
     @PostMapping("/organizations/{organizationId}/checkout")
+    @Auditable(action = "START_CHECKOUT", entityType = "Subscription")
     public ResponseEntity<Map<String, String>> startCheckout(
             @PathVariable Long organizationId,
             @RequestParam PlanType plan) {
@@ -97,6 +99,7 @@ public class BillingController {
      * Cancela subscription da organização.
      */
     @PostMapping("/organizations/{organizationId}/cancel")
+    @Auditable(action = "CANCEL_SUBSCRIPTION", entityType = "Subscription")
     public ResponseEntity<Void> cancelSubscription(@PathVariable Long organizationId) {
         boolean cancelled = stripeService.cancelSubscription(organizationId);
         return cancelled ? ResponseEntity.ok().build() : ResponseEntity.badRequest().build();

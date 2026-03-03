@@ -220,6 +220,13 @@
             <artifactId>pgvector</artifactId>
             <version>0.1.2</version>
         </dependency>
+
+        <!-- Stripe SDK for billing -->
+        <dependency>
+            <groupId>com.stripe</groupId>
+            <artifactId>stripe-java</artifactId>
+            <version>26.1.0</version>
+        </dependency>
     </dependencies>
 
     <build>
