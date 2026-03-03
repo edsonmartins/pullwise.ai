@@ -1,6 +1,11 @@
 package com.pullwise.api.application.service.review;
 
+import com.pullwise.api.application.service.billing.RateLimitingService;
+import com.pullwise.api.application.service.integration.BitBucketService;
 import com.pullwise.api.application.service.integration.GitHubService;
+import com.pullwise.api.application.service.integration.GitLabService;
+import com.pullwise.api.application.service.notification.NotificationService;
+import com.pullwise.api.domain.enums.Platform;
 import com.pullwise.api.domain.enums.ReviewStatus;
 import com.pullwise.api.domain.model.*;
 import com.pullwise.api.domain.repository.*;
@@ -30,7 +35,11 @@ public class ReviewOrchestrator {
     private final ConsolidationService consolidationService;
     private final PostingService postingService;
     private final GitHubService gitHubService;
+    private final BitBucketService bitBucketService;
+    private final GitLabService gitLabService;
     private final UsageRecordRepository usageRecordRepository;
+    private final RateLimitingService rateLimitingService;
+    private final NotificationService notificationService;
 
     /**
      * Inicia um review de forma assíncrona.
@@ -47,12 +56,16 @@ public class ReviewOrchestrator {
             review.start();
             reviewRepository.save(review);
 
-            // 1. Buscar diffs do PR
+            // 1. Buscar diffs do PR (dispatch por plataforma)
             PullRequest pr = review.getPullRequest();
-            List<GitHubService.FileDiff> diffs = gitHubService.fetchPullRequestDiffs(
-                    pr.getProject(),
-                    pr.getPrNumber()
-            );
+            List<GitHubService.FileDiff> diffs;
+            if (pr.getPlatform() == Platform.BITBUCKET) {
+                diffs = bitBucketService.fetchPullRequestDiffs(pr.getProject(), pr.getPrNumber());
+            } else if (pr.getPlatform() == Platform.GITLAB) {
+                diffs = gitLabService.fetchMergeRequestDiffs(pr.getProject(), pr.getPrNumber());
+            } else {
+                diffs = gitHubService.fetchPullRequestDiffs(pr.getProject(), pr.getPrNumber());
+            }
 
             // 2. Executar análise SAST (se habilitado)
             List<Issue> sastIssues = List.of();
@@ -91,6 +104,9 @@ public class ReviewOrchestrator {
             // 9. Registrar uso
             recordUsage(review);
 
+            // 10. Enviar notificações (Slack, Teams — assíncrono)
+            notificationService.notifyReviewCompleted(review, allIssues);
+
             log.info("Review {} completed with {} issues", reviewId, allIssues.size());
 
         } catch (Exception e) {
@@ -111,6 +127,11 @@ public class ReviewOrchestrator {
         // Verificar se já existe review em andamento
         if (pr.hasActiveReview()) {
             throw new IllegalStateException("Review already in progress for this PR");
+        }
+
+        // Verificar rate limit baseado no plano da organização
+        if (pr.getProject() != null && pr.getProject().getOrganization() != null) {
+            rateLimitingService.checkReviewLimit(pr.getProject().getOrganization().getId());
         }
 
         Review review = Review.builder()

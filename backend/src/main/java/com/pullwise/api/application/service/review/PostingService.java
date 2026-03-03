@@ -1,6 +1,9 @@
 package com.pullwise.api.application.service.review;
 
+import com.pullwise.api.application.service.integration.BitBucketService;
 import com.pullwise.api.application.service.integration.GitHubService;
+import com.pullwise.api.application.service.integration.GitLabService;
+import com.pullwise.api.domain.enums.Platform;
 import com.pullwise.api.domain.model.Issue;
 import com.pullwise.api.domain.model.PullRequest;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +24,8 @@ import java.util.stream.Collectors;
 public class PostingService {
 
     private final GitHubService gitHubService;
+    private final BitBucketService bitBucketService;
+    private final GitLabService gitLabService;
 
     @Value("${pullwise.review.post-as-comment:true}")
     private boolean postAsComment;
@@ -40,11 +45,26 @@ public class PostingService {
         String comment = formatReviewComment(issues);
 
         try {
-            String commentId = gitHubService.postPullRequestComment(
-                    pr.getProject(),
-                    pr.getPrNumber(),
-                    comment
-            );
+            String commentId;
+            if (pr.getPlatform() == Platform.BITBUCKET) {
+                commentId = bitBucketService.postReviewComment(
+                        pr.getProject(),
+                        (long) pr.getPrNumber(),
+                        comment
+                );
+            } else if (pr.getPlatform() == Platform.GITLAB) {
+                commentId = gitLabService.postMergeRequestComment(
+                        pr.getProject(),
+                        pr.getPrNumber(),
+                        comment
+                );
+            } else {
+                commentId = gitHubService.postPullRequestComment(
+                        pr.getProject(),
+                        pr.getPrNumber(),
+                        comment
+                );
+            }
 
             log.info("Posted review comment {} for PR {}", commentId, pr.getPrNumber());
             return commentId;

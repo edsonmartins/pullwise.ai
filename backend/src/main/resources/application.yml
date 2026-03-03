@@ -73,6 +73,22 @@ integrations:
     client-id: ${GITHUB_CLIENT_ID:}
     client-secret: ${GITHUB_CLIENT_SECRET:}
 
+  gitlab:
+    api-url: ${GITLAB_API_URL:https://gitlab.com/api/v4}
+    token: ${GITLAB_TOKEN:}
+    webhook-secret: ${GITLAB_WEBHOOK_SECRET:}
+
+  bitbucket:
+    api-url: ${BITBUCKET_API_URL:https://api.bitbucket.org/2.0}
+    username: ${BITBUCKET_USERNAME:}
+    app-password: ${BITBUCKET_APP_PASSWORD:}
+
+  slack:
+    default-webhook-url: ${SLACK_WEBHOOK_URL:}
+
+  teams:
+    default-webhook-url: ${TEAMS_WEBHOOK_URL:}
+
   sonarqube:
     url: ${SONARQUBE_URL:}
     token: ${SONARQUBE_TOKEN:}
