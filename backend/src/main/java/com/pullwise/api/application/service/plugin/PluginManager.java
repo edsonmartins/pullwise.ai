@@ -8,9 +8,14 @@ import com.pullwise.api.application.service.plugin.api.PluginException;
 import com.pullwise.api.application.service.plugin.api.PluginLanguage;
 import com.pullwise.api.application.service.plugin.api.PluginMetadata;
 import com.pullwise.api.application.service.plugin.api.PluginType;
+import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
@@ -21,6 +26,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Gerenciador central de plugins.
@@ -53,6 +59,11 @@ public class PluginManager {
     private final Map<PluginLanguage, Set<String>> pluginsByLanguage = new ConcurrentHashMap<>();
 
     /**
+     * ClassLoaders de plugins externos (para cleanup).
+     */
+    private final List<URLClassLoader> externalClassLoaders = new ArrayList<>();
+
+    /**
      * Executor para execução paralela de plugins.
      */
     private final ExecutorService executor;
@@ -61,6 +72,9 @@ public class PluginManager {
      * Diretório base de plugins externos.
      */
     private final Path pluginsDirectory;
+
+    @Value("${pullwise.plugins.directory:/opt/pullwise/plugins}")
+    private String pluginsDirectoryPath;
 
     public PluginManager() {
         this.executor = Executors.newCachedThreadPool(r -> {
@@ -79,8 +93,11 @@ public class PluginManager {
             log.warn("Failed to create plugins directory: {}", e.getMessage());
         }
 
-        // Carregar plugins via SPI
+        // Carregar plugins via SPI (bundled)
         loadJavaPlugins();
+
+        // Carregar plugins externos (JARs no diretório de plugins)
+        loadExternalPlugins();
     }
 
     // ========== Discovery ==========
@@ -104,6 +121,91 @@ public class PluginManager {
         }
 
         log.info("Loaded {} Java plugins", loaded);
+    }
+
+    /**
+     * Carrega plugins externos a partir de arquivos JAR no diretório de plugins.
+     * Cada JAR é carregado com um URLClassLoader isolado e os plugins são
+     * descobertos via ServiceLoader (SPI).
+     */
+    private void loadExternalPlugins() {
+        Path dir = pluginsDirectory;
+        if (!Files.exists(dir) || !Files.isDirectory(dir)) {
+            log.debug("External plugins directory does not exist: {}", dir);
+            return;
+        }
+
+        log.info("Scanning for external plugin JARs in {}", dir);
+
+        try (Stream<Path> paths = Files.list(dir)) {
+            List<Path> jarFiles = paths
+                    .filter(p -> p.toString().toLowerCase().endsWith(".jar"))
+                    .collect(Collectors.toList());
+
+            if (jarFiles.isEmpty()) {
+                log.debug("No external plugin JARs found");
+                return;
+            }
+
+            int loaded = 0;
+            for (Path jarFile : jarFiles) {
+                try {
+                    int count = loadPluginJar(jarFile);
+                    loaded += count;
+                } catch (Exception e) {
+                    log.error("Failed to load plugin JAR {}: {}", jarFile.getFileName(), e.getMessage());
+                }
+            }
+
+            log.info("Loaded {} external plugins from {} JARs", loaded, jarFiles.size());
+
+        } catch (IOException e) {
+            log.error("Error scanning plugins directory: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Carrega plugins de um arquivo JAR usando URLClassLoader + ServiceLoader.
+     *
+     * @param jarFile Caminho do arquivo JAR
+     * @return Número de plugins carregados do JAR
+     */
+    private int loadPluginJar(Path jarFile) throws Exception {
+        log.debug("Loading plugin JAR: {}", jarFile.getFileName());
+
+        URL jarUrl = jarFile.toUri().toURL();
+        URLClassLoader classLoader = new URLClassLoader(
+                new URL[]{jarUrl},
+                this.getClass().getClassLoader()
+        );
+
+        // Registrar para cleanup posterior
+        externalClassLoaders.add(classLoader);
+
+        ServiceLoader<CodeReviewPlugin> loader = ServiceLoader.load(CodeReviewPlugin.class, classLoader);
+        int loaded = 0;
+
+        for (CodeReviewPlugin plugin : loader) {
+            try {
+                registerPlugin(plugin, true);
+                loaded++;
+                log.info("Loaded external plugin '{}' v{} from {}",
+                        plugin.getName(), plugin.getVersion(), jarFile.getFileName());
+            } catch (Exception e) {
+                log.error("Failed to register external plugin from {}: {}",
+                        jarFile.getFileName(), e.getMessage());
+            }
+        }
+
+        if (loaded == 0) {
+            log.warn("JAR {} contains no CodeReviewPlugin implementations (check META-INF/services)",
+                    jarFile.getFileName());
+            // Fechar classloader se nenhum plugin foi carregado
+            externalClassLoaders.remove(classLoader);
+            classLoader.close();
+        }
+
+        return loaded;
     }
 
     /**
@@ -412,7 +514,9 @@ public class PluginManager {
 
     /**
      * Desliga todos os plugins e libera recursos.
+     * Fecha URLClassLoaders de plugins externos para evitar leaks.
      */
+    @PreDestroy
     public void shutdown() {
         log.info("Shutting down PluginManager...");
 
@@ -427,6 +531,16 @@ public class PluginManager {
         loadedPlugins.clear();
         pluginsByType.clear();
         pluginsByLanguage.clear();
+
+        // Fechar classloaders de plugins externos
+        for (URLClassLoader classLoader : externalClassLoaders) {
+            try {
+                classLoader.close();
+            } catch (IOException e) {
+                log.warn("Error closing plugin classloader: {}", e.getMessage());
+            }
+        }
+        externalClassLoaders.clear();
 
         executor.shutdown();
         try {
