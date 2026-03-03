@@ -2,6 +2,7 @@ package com.pullwise.api.infrastructure.rest;
 
 import com.pullwise.api.application.dto.request.CreateReviewRequest;
 import com.pullwise.api.application.dto.response.*;
+import com.pullwise.api.application.service.audit.Auditable;
 import com.pullwise.api.application.service.review.ReviewOrchestrator;
 import com.pullwise.api.domain.model.Issue;
 import com.pullwise.api.domain.model.Review;
@@ -84,6 +85,7 @@ public class ReviewController {
      * Cria um novo review.
      */
     @PostMapping
+    @Auditable(action = "CREATE_REVIEW", entityType = "Review")
     public ResponseEntity<ReviewDTO> createReview(@Valid @RequestBody CreateReviewRequest request) {
         Review review = reviewOrchestrator.createReview(
                 request.pullRequestId(),
