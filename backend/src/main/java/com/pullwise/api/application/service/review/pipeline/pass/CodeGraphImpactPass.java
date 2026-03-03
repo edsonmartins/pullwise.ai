@@ -1,6 +1,7 @@
 package com.pullwise.api.application.service.review.pipeline.pass;
 
 import com.pullwise.api.application.service.graph.CodeGraphService;
+import com.pullwise.api.application.service.integration.GitHubService;
 import com.pullwise.api.application.service.llm.router.MultiModelLLMRouter;
 import com.pullwise.api.domain.model.Issue;
 import com.pullwise.api.domain.model.PullRequest;
@@ -44,7 +45,8 @@ public class CodeGraphImpactPass {
      * @return PassResult com issues de impacto
      */
     public PassResult execute(PullRequest pullRequest, Review review,
-                             PassResult sastResult, PassResult llmResult) {
+                             PassResult sastResult, PassResult llmResult,
+                             List<GitHubService.FileDiff> diffs) {
         long startTime = System.currentTimeMillis();
 
         String repoIdentifier = pullRequest.getProject() != null
@@ -56,7 +58,7 @@ public class CodeGraphImpactPass {
 
         try {
             // Analisar impacto no grafo de código
-            List<ImpactAnalysis> impacts = analyzeImpact(pullRequest, review);
+            List<ImpactAnalysis> impacts = analyzeImpact(pullRequest, review, diffs);
 
             // Gerar issues baseados em alto impacto
             for (ImpactAnalysis impact : impacts) {
@@ -80,7 +82,7 @@ public class CodeGraphImpactPass {
 
         // Metadata
         Map<String, Object> metadata = new HashMap<>();
-        metadata.put("filesAnalyzed", 0);  // TODO: implementar contagem de arquivos
+        metadata.put("filesAnalyzed", diffs.size());
         result.setMetadata(metadata);
 
         return result;
@@ -89,13 +91,15 @@ public class CodeGraphImpactPass {
     /**
      * Analisa o impacto das mudanças no grafo de código.
      */
-    private List<ImpactAnalysis> analyzeImpact(PullRequest pullRequest, Review review) {
+    private List<ImpactAnalysis> analyzeImpact(PullRequest pullRequest, Review review,
+                                               List<GitHubService.FileDiff> diffs) {
         List<ImpactAnalysis> impacts = new ArrayList<>();
 
         try {
-            // TODO: Obter arquivos alterados do diff do PR
-            // Por ora, retorna lista vazia
-            List<String> changedFiles = List.of();
+            // Extrair arquivos alterados dos diffs
+            List<String> changedFiles = diffs.stream()
+                    .map(GitHubService.FileDiff::filename)
+                    .toList();
 
             String repoIdentifier = pullRequest.getProject() != null
                     ? pullRequest.getProject().getName()

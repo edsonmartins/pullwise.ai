@@ -1,5 +1,7 @@
 package com.pullwise.api.application.service.review.pipeline.pass;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pullwise.api.application.service.integration.GitHubService;
 import com.pullwise.api.application.service.llm.router.MultiModelLLMRouter;
 import com.pullwise.api.domain.model.Issue;
 import com.pullwise.api.domain.model.PullRequest;
@@ -33,6 +35,7 @@ import java.util.stream.Collectors;
 public class LlmPrimaryPass {
 
     private final MultiModelLLMRouter llmRouter;
+    private final ObjectMapper objectMapper;
 
     /**
      * Executa a análise LLM primária.
@@ -42,7 +45,8 @@ public class LlmPrimaryPass {
      * @param sastResult  Resultados da passada SAST (contexto)
      * @return PassResult com os issues encontrados
      */
-    public PassResult execute(PullRequest pullRequest, Review review, PassResult sastResult) {
+    public PassResult execute(PullRequest pullRequest, Review review, PassResult sastResult,
+                              List<GitHubService.FileDiff> diffs) {
         long startTime = System.currentTimeMillis();
 
         String repoIdentifier = pullRequest.getProject() != null
@@ -57,7 +61,7 @@ public class LlmPrimaryPass {
             String sastContext = buildSastContext(sastResult);
 
             // Para cada arquivo alterado, fazer análise LLM
-            Map<String, List<FileChange>> changesByFile = groupChangesByFile(pullRequest);
+            Map<String, List<FileChange>> changesByFile = groupChangesByFile(diffs);
 
             for (var entry : changesByFile.entrySet()) {
                 String filePath = entry.getKey();
@@ -116,12 +120,34 @@ public class LlmPrimaryPass {
     }
 
     /**
-     * Agrupa mudanças por arquivo.
+     * Agrupa mudanças por arquivo a partir dos diffs do GitHub.
      */
-    private Map<String, List<FileChange>> groupChangesByFile(PullRequest pullRequest) {
-        // Em produção, parsearia o diff real
-        // Por ora, retorna mapa vazio (será populado pelo diff parser)
-        return new HashMap<>();
+    private Map<String, List<FileChange>> groupChangesByFile(List<GitHubService.FileDiff> diffs) {
+        Map<String, List<FileChange>> changesByFile = new HashMap<>();
+
+        for (GitHubService.FileDiff diff : diffs) {
+            if (diff.patch() == null || diff.patch().isBlank()) {
+                continue;
+            }
+
+            FileChange.ChangeType changeType = switch (diff.status()) {
+                case "added" -> FileChange.ChangeType.ADDED;
+                case "removed" -> FileChange.ChangeType.DELETED;
+                default -> FileChange.ChangeType.MODIFIED;
+            };
+
+            FileChange change = FileChange.builder()
+                    .filePath(diff.filename())
+                    .lineStart(1)
+                    .lineEnd(diff.additions() + diff.deletions())
+                    .diff(diff.patch())
+                    .type(changeType)
+                    .build();
+
+            changesByFile.computeIfAbsent(diff.filename(), k -> new ArrayList<>()).add(change);
+        }
+
+        return changesByFile;
     }
 
     /**
@@ -215,19 +241,48 @@ public class LlmPrimaryPass {
         List<Issue> issues = new ArrayList<>();
 
         try {
-            // Tenta extrair JSON da resposta
             String jsonBlock = extractJsonBlock(response);
-            if (jsonBlock == null) {
-                // Se não conseguiu extrair JSON, tenta criar um issue genérico
+            if (jsonBlock == null || jsonBlock.isBlank()) {
                 if (response.length() > 50) {
                     issues.add(createGenericIssue(response, filePath, review));
                 }
                 return issues;
             }
 
-            // TODO: Parse JSON e criar issues
-            // Por ora, cria um issue genérico com o conteúdo da resposta
-            if (jsonBlock.length() > 50) {
+            // Tentar parse como objeto com campo "issues"
+            LlmIssueResponse parsed = null;
+            try {
+                parsed = objectMapper.readValue(jsonBlock, LlmIssueResponse.class);
+            } catch (Exception e) {
+                // Tentar parse como array direto
+                try {
+                    LlmIssue[] issueArray = objectMapper.readValue(jsonBlock, LlmIssue[].class);
+                    parsed = new LlmIssueResponse(List.of(issueArray));
+                } catch (Exception e2) {
+                    log.debug("JSON parse failed, falling back to generic issue: {}", e2.getMessage());
+                }
+            }
+
+            if (parsed != null && parsed.issues() != null) {
+                for (LlmIssue llmIssue : parsed.issues()) {
+                    Severity severity = parseSeverity(llmIssue.severity());
+                    IssueType type = parseIssueType(llmIssue.category());
+
+                    issues.add(Issue.builder()
+                            .review(review)
+                            .type(type)
+                            .severity(severity)
+                            .title(llmIssue.title() != null ? llmIssue.title() : "Code Review Issue")
+                            .description(llmIssue.description() != null ? llmIssue.description() : "")
+                            .filePath(filePath)
+                            .lineStart(llmIssue.line() != null ? llmIssue.line() : 1)
+                            .lineEnd(llmIssue.line() != null ? llmIssue.line() : 1)
+                            .ruleId("LLM_ANALYSIS")
+                            .source(IssueSource.LLM)
+                            .createdAt(LocalDateTime.now())
+                            .build());
+                }
+            } else if (jsonBlock.length() > 50) {
                 issues.add(createGenericIssue(jsonBlock, filePath, review));
             }
 
@@ -237,6 +292,33 @@ public class LlmPrimaryPass {
 
         return issues;
     }
+
+    private Severity parseSeverity(String severity) {
+        if (severity == null) return Severity.MEDIUM;
+        try {
+            return Severity.valueOf(severity.toUpperCase());
+        } catch (Exception e) {
+            return Severity.MEDIUM;
+        }
+    }
+
+    private IssueType parseIssueType(String category) {
+        if (category == null) return IssueType.CODE_SMELL;
+        try {
+            return IssueType.valueOf(category.toUpperCase());
+        } catch (Exception e) {
+            String lower = category.toLowerCase();
+            if (lower.contains("bug")) return IssueType.BUG;
+            if (lower.contains("security")) return IssueType.SECURITY;
+            if (lower.contains("performance")) return IssueType.PERFORMANCE;
+            if (lower.contains("architecture")) return IssueType.CODE_SMELL;
+            return IssueType.CODE_SMELL;
+        }
+    }
+
+    // Records for JSON deserialization
+    private record LlmIssueResponse(List<LlmIssue> issues) {}
+    private record LlmIssue(String title, String description, String severity, Integer line, String category) {}
 
     /**
      * Extrai o bloco JSON de uma resposta markdown.

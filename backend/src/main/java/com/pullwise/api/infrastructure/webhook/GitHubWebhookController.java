@@ -11,9 +11,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.Optional;
 
 /**
@@ -32,6 +39,9 @@ public class GitHubWebhookController {
     private final ConfigurationResolver configurationResolver;
     private final ObjectMapper objectMapper;
 
+    @Value("${integrations.github.webhook-secret:}")
+    private String webhookSecret;
+
     /**
      * Endpoint para receber webhooks do GitHub.
      */
@@ -45,10 +55,13 @@ public class GitHubWebhookController {
         log.info("Received GitHub webhook event: {}", eventType);
 
         try {
-            // Validar assinatura do webhook (em produção)
-            // if (!validateSignature(payload, signature)) {
-            //     return ResponseEntity.status(401).build();
-            // }
+            // Validar assinatura do webhook
+            if (webhookSecret != null && !webhookSecret.isBlank()) {
+                if (!validateSignature(payload, signature)) {
+                    log.warn("Invalid webhook signature from {}", request.getRemoteAddr());
+                    return ResponseEntity.status(401).build();
+                }
+            }
 
             GitHubService.GitHubWebhookPayload webhookPayload =
                     objectMapper.readValue(payload, GitHubService.GitHubWebhookPayload.class);
@@ -187,5 +200,27 @@ public class GitHubWebhookController {
                                          boolean merged, boolean closed) {
         // Buscar PR e atualizar status
         // Implementação simplificada
+    }
+
+    /**
+     * Valida a assinatura HMAC-SHA256 do webhook do GitHub.
+     */
+    private boolean validateSignature(String payload, String signature) {
+        if (signature == null || !signature.startsWith("sha256=")) {
+            return false;
+        }
+
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            SecretKeySpec secretKeySpec = new SecretKeySpec(
+                    webhookSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+            mac.init(secretKeySpec);
+            byte[] hash = mac.doFinal(payload.getBytes(StandardCharsets.UTF_8));
+            String expected = "sha256=" + HexFormat.of().formatHex(hash);
+            return expected.equals(signature);
+        } catch (NoSuchAlgorithmException | InvalidKeyException e) {
+            log.error("Failed to validate webhook signature", e);
+            return false;
+        }
     }
 }

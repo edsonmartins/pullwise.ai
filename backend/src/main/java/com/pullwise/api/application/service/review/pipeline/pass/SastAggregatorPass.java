@@ -1,5 +1,6 @@
 package com.pullwise.api.application.service.review.pipeline.pass;
 
+import com.pullwise.api.application.service.integration.GitHubService;
 import com.pullwise.api.application.service.integration.SonarQubeService;
 import com.pullwise.api.domain.model.Issue;
 import com.pullwise.api.domain.model.PullRequest;
@@ -47,9 +48,11 @@ public class SastAggregatorPass {
      *
      * @param pullRequest O PR a ser analisado
      * @param review      O review associado
+     * @param diffs       Diffs dos arquivos alterados
      * @return PassResult com os issues encontrados
      */
-    public PassResult execute(PullRequest pullRequest, Review review) {
+    public PassResult execute(PullRequest pullRequest, Review review,
+                              List<GitHubService.FileDiff> diffs) {
         long startTime = System.currentTimeMillis();
 
         String repoIdentifier = pullRequest.getProject() != null
@@ -57,8 +60,8 @@ public class SastAggregatorPass {
                 : "unknown";
         log.debug("Starting SAST aggregation for PR {}/{}", repoIdentifier, pullRequest.getPrNumber());
 
-        // Detectar linguagens usadas no PR
-        Set<ProgrammingLanguage> languages = detectLanguages(pullRequest);
+        // Detectar linguagens usadas no PR a partir dos diffs reais
+        Set<ProgrammingLanguage> languages = detectLanguages(diffs);
         log.debug("Detected languages: {}", languages);
 
         // Selecionar ferramentas apropriadas
@@ -70,7 +73,7 @@ public class SastAggregatorPass {
 
         for (SastTool tool : tools) {
             CompletableFuture<List<ToolIssue>> future = CompletableFuture.supplyAsync(
-                    () -> executeTool(tool, pullRequest, review)
+                    () -> executeTool(tool, pullRequest, review, diffs)
             );
             futures.put(tool, future);
         }
@@ -126,21 +129,45 @@ public class SastAggregatorPass {
     }
 
     /**
-     * Detecta as linguagens de programação usadas no PR.
+     * Detecta as linguagens de programação usadas no PR com base nas extensões dos arquivos.
      */
-    private Set<ProgrammingLanguage> detectLanguages(PullRequest pullRequest) {
+    private Set<ProgrammingLanguage> detectLanguages(List<GitHubService.FileDiff> diffs) {
         Set<ProgrammingLanguage> languages = new HashSet<>();
 
-        // TODO: Implementar detecção baseada nas extensões dos arquivos alterados
-        // Por ora, usa Java como padrão
-        languages.add(ProgrammingLanguage.JAVA);
+        for (GitHubService.FileDiff diff : diffs) {
+            String filename = diff.filename().toLowerCase();
+            int dotIndex = filename.lastIndexOf('.');
+            if (dotIndex == -1) continue;
 
-        // Fallback final
+            String ext = filename.substring(dotIndex + 1);
+            ProgrammingLanguage lang = mapExtensionToLanguage(ext);
+            if (lang != null) {
+                languages.add(lang);
+            }
+        }
+
         if (languages.isEmpty()) {
             languages.add(ProgrammingLanguage.JAVA);
         }
 
         return languages;
+    }
+
+    /**
+     * Mapeia extensão de arquivo para linguagem de programação.
+     */
+    private ProgrammingLanguage mapExtensionToLanguage(String ext) {
+        return switch (ext) {
+            case "java" -> ProgrammingLanguage.JAVA;
+            case "js", "jsx", "mjs", "cjs" -> ProgrammingLanguage.JAVASCRIPT;
+            case "ts", "tsx" -> ProgrammingLanguage.TYPESCRIPT;
+            case "py", "pyi" -> ProgrammingLanguage.PYTHON;
+            case "go" -> ProgrammingLanguage.GO;
+            case "rb" -> ProgrammingLanguage.RUBY;
+            case "php" -> ProgrammingLanguage.PHP;
+            case "cs" -> ProgrammingLanguage.CSHARP;
+            default -> null;
+        };
     }
 
     /**
@@ -204,9 +231,10 @@ public class SastAggregatorPass {
     /**
      * Executa uma ferramenta específica.
      */
-    private List<ToolIssue> executeTool(SastTool tool, PullRequest pullRequest, Review review) {
+    private List<ToolIssue> executeTool(SastTool tool, PullRequest pullRequest, Review review,
+                                         List<GitHubService.FileDiff> diffs) {
         try {
-            return toolExecutor.execute(tool, pullRequest, review);
+            return toolExecutor.execute(tool, pullRequest, review, diffs);
         } catch (Exception e) {
             log.warn("Error executing {}: {}", tool.getName(), e.getMessage());
             return List.of();

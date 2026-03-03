@@ -125,14 +125,33 @@ public class ProjectController {
     }
 
     private Long getUserIdFromPrincipal(Principal principal) {
-        // Extrair user ID do JWT ou OAuth2 principal
+        if (principal == null) {
+            throw new org.springframework.security.authentication.AuthenticationCredentialsNotFoundException(
+                    "No authentication principal found");
+        }
+
+        // JWT authentication: subject é o user ID como string
+        String name = principal.getName();
+        if (name != null) {
+            try {
+                return Long.parseLong(name);
+            } catch (NumberFormatException e) {
+                log.debug("Principal name is not a numeric user ID: {}", name);
+            }
+        }
+
+        // OAuth2 principal fallback
         if (principal instanceof OAuth2AuthenticatedPrincipal oauth) {
             Object userId = oauth.getAttribute("user_id");
             if (userId instanceof Long l) {
                 return l;
             }
+            if (userId instanceof String s) {
+                return Long.parseLong(s);
+            }
         }
-        // Fallback: pegar do subject
-        return 1L; // TODO: Implementar extração correta
+
+        throw new org.springframework.security.authentication.AuthenticationCredentialsNotFoundException(
+                "Unable to extract user ID from authentication principal");
     }
 }

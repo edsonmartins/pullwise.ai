@@ -1,5 +1,8 @@
 package com.pullwise.api.application.service.review.pipeline;
 
+import com.pullwise.api.application.service.integration.BitBucketService;
+import com.pullwise.api.application.service.integration.GitHubService;
+import com.pullwise.api.application.service.integration.GitLabService;
 import com.pullwise.api.application.service.llm.router.MultiModelLLMRouter;
 import com.pullwise.api.application.service.review.pipeline.pass.*;
 import com.pullwise.api.application.service.review.pipeline.synthesis.ResultSynthesizer;
@@ -51,6 +54,9 @@ public class MultiPassReviewOrchestrator {
     private final IssueDuplicationDetector duplicationDetector;
     private final MultiModelLLMRouter llmRouter;
     private final IssueRepository issueRepository;
+    private final GitHubService gitHubService;
+    private final BitBucketService bitBucketService;
+    private final GitLabService gitLabService;
 
     /**
      * Executa o pipeline completo de múltiplas passadas.
@@ -71,32 +77,46 @@ public class MultiPassReviewOrchestrator {
         result.setReviewId(review.getId());
 
         try {
+            // Buscar diffs do PR (dispatch por plataforma)
+            List<GitHubService.FileDiff> diffs;
+            if (pullRequest.getPlatform() == Platform.BITBUCKET) {
+                diffs = bitBucketService.fetchPullRequestDiffs(
+                        pullRequest.getProject(), pullRequest.getPrNumber());
+            } else if (pullRequest.getPlatform() == Platform.GITLAB) {
+                diffs = gitLabService.fetchMergeRequestDiffs(
+                        pullRequest.getProject(), pullRequest.getPrNumber());
+            } else {
+                diffs = gitHubService.fetchPullRequestDiffs(
+                        pullRequest.getProject(), pullRequest.getPrNumber());
+            }
+            log.debug("Fetched {} file diffs for PR #{}", diffs.size(), pullRequest.getPrNumber());
+
             // ============================================
             // PASSADA 1: SAST (Paralelo)
             // ============================================
             log.debug("Pass 1/4: SAST Aggregation");
-            PassResult sastResult = executeSastPass(pullRequest, review);
+            PassResult sastResult = executeSastPass(pullRequest, review, diffs);
             result.setSastResult(sastResult);
 
             // ============================================
             // PASSADA 2: LLM Primary
             // ============================================
             log.debug("Pass 2/4: LLM Primary Analysis");
-            PassResult llmResult = executeLlmPrimaryPass(pullRequest, review, sastResult);
+            PassResult llmResult = executeLlmPrimaryPass(pullRequest, review, sastResult, diffs);
             result.setLlmResult(llmResult);
 
             // ============================================
             // PASSADA 3: Security Focus
             // ============================================
             log.debug("Pass 3/4: Security-Focused Analysis");
-            PassResult securityResult = executeSecurityPass(pullRequest, review, sastResult, llmResult);
+            PassResult securityResult = executeSecurityPass(pullRequest, review, sastResult, llmResult, diffs);
             result.setSecurityResult(securityResult);
 
             // ============================================
             // PASSADA 4: Code Graph Impact
             // ============================================
             log.debug("Pass 4/4: Code Graph Impact Analysis");
-            PassResult impactResult = executeImpactPass(pullRequest, review, sastResult, llmResult);
+            PassResult impactResult = executeImpactPass(pullRequest, review, sastResult, llmResult, diffs);
             result.setImpactResult(impactResult);
 
             // ============================================
@@ -153,9 +173,10 @@ public class MultiPassReviewOrchestrator {
     /**
      * Passada 1: SAST - executa em paralelo todas as ferramentas.
      */
-    private PassResult executeSastPass(PullRequest pullRequest, Review review) {
+    private PassResult executeSastPass(PullRequest pullRequest, Review review,
+                                       List<GitHubService.FileDiff> diffs) {
         try {
-            PassResult result = sastAggregatorPass.execute(pullRequest, review);
+            PassResult result = sastAggregatorPass.execute(pullRequest, review, diffs);
             log.debug("SAST pass completed: {} issues found", result.getIssues().size());
             return result;
         } catch (Exception e) {
@@ -168,10 +189,10 @@ public class MultiPassReviewOrchestrator {
      * Passada 2: LLM Primary - análise de lógica e código.
      */
     private PassResult executeLlmPrimaryPass(PullRequest pullRequest, Review review,
-                                             PassResult sastResult) {
+                                             PassResult sastResult,
+                                             List<GitHubService.FileDiff> diffs) {
         try {
-            // Timeout de 5 minutos para análise LLM
-            return executeWithTimeout(() -> llmPrimaryPass.execute(pullRequest, review, sastResult),
+            return executeWithTimeout(() -> llmPrimaryPass.execute(pullRequest, review, sastResult, diffs),
                     5, TimeUnit.MINUTES);
         } catch (Exception e) {
             log.warn("LLM Primary pass failed, using fallback", e);
@@ -183,9 +204,10 @@ public class MultiPassReviewOrchestrator {
      * Passada 3: Security Focus - análise focada em segurança.
      */
     private PassResult executeSecurityPass(PullRequest pullRequest, Review review,
-                                           PassResult sastResult, PassResult llmResult) {
+                                           PassResult sastResult, PassResult llmResult,
+                                           List<GitHubService.FileDiff> diffs) {
         try {
-            return executeWithTimeout(() -> securityFocusedPass.execute(pullRequest, review, sastResult, llmResult),
+            return executeWithTimeout(() -> securityFocusedPass.execute(pullRequest, review, sastResult, llmResult, diffs),
                     3, TimeUnit.MINUTES);
         } catch (Exception e) {
             log.warn("Security pass failed, continuing", e);
@@ -197,9 +219,10 @@ public class MultiPassReviewOrchestrator {
      * Passada 4: Code Graph Impact - análise de impacto cross-file.
      */
     private PassResult executeImpactPass(PullRequest pullRequest, Review review,
-                                        PassResult sastResult, PassResult llmResult) {
+                                        PassResult sastResult, PassResult llmResult,
+                                        List<GitHubService.FileDiff> diffs) {
         try {
-            return executeWithTimeout(() -> codeGraphImpactPass.execute(pullRequest, review, sastResult, llmResult),
+            return executeWithTimeout(() -> codeGraphImpactPass.execute(pullRequest, review, sastResult, llmResult, diffs),
                     2, TimeUnit.MINUTES);
         } catch (Exception e) {
             log.warn("Impact pass failed, continuing", e);
