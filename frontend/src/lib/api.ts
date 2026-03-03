@@ -229,6 +229,24 @@ export interface SubscriptionResponse {
   updatedAt?: string
 }
 
+export const usersApi = {
+  async updateProfile(data: { displayName: string }): Promise<User> {
+    const response = await api.put<User>('/users/me', data)
+    return response.data
+  },
+}
+
+export const configurationsApi = {
+  async saveIntegrations(data: {
+    sonarqubeUrl?: string
+    sonarqubeToken?: string
+    openRouterKey?: string
+    bitbucketToken?: string
+  }): Promise<void> {
+    await api.put('/configurations', data)
+  },
+}
+
 export const projectsApi = {
   async list(): Promise<Project[]> {
     const response = await api.get<Project[]>('/projects')

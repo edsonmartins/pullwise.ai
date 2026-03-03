@@ -1,16 +1,21 @@
 package com.pullwise.api.infrastructure.rest;
 
+import com.pullwise.api.application.dto.request.SaveIntegrationsRequest;
 import com.pullwise.api.application.dto.request.UpdateConfigurationRequest;
 import com.pullwise.api.application.dto.response.ConfigurationDTO;
 import com.pullwise.api.application.service.config.ConfigurationResolver;
 import com.pullwise.api.domain.model.Configuration;
+import com.pullwise.api.domain.model.Organization;
 import com.pullwise.api.domain.model.Project;
+import com.pullwise.api.domain.model.User;
 import com.pullwise.api.domain.repository.ConfigurationRepository;
 import com.pullwise.api.domain.repository.ProjectRepository;
+import com.pullwise.api.domain.repository.UserRepository;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -26,7 +31,43 @@ public class ConfigurationController {
 
     private final ConfigurationRepository configurationRepository;
     private final ProjectRepository projectRepository;
+    private final UserRepository userRepository;
     private final ConfigurationResolver configurationResolver;
+
+    /**
+     * Salva configurações de integrações (SonarQube, OpenRouter, BitBucket).
+     * Armazena como configurações na organização do usuário autenticado.
+     */
+    @PutMapping
+    public ResponseEntity<Void> saveIntegrations(
+            @Valid @RequestBody SaveIntegrationsRequest request,
+            java.security.Principal principal) {
+
+        Long userId = getUserIdFromPrincipal(principal);
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        // Usar a primeira organização do usuário
+        Organization org = user.getMemberships().stream()
+                .map(com.pullwise.api.domain.model.OrganizationMember::getOrganization)
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("User has no organization"));
+
+        if (request.sonarqubeUrl() != null) {
+            configurationResolver.saveOrgConfig(org, "sonarqube.url", request.sonarqubeUrl());
+        }
+        if (request.sonarqubeToken() != null) {
+            configurationResolver.saveOrgConfig(org, "sonarqube.token", request.sonarqubeToken());
+        }
+        if (request.openRouterKey() != null) {
+            configurationResolver.saveOrgConfig(org, "llm.api_key", request.openRouterKey());
+        }
+        if (request.bitbucketToken() != null) {
+            configurationResolver.saveOrgConfig(org, "bitbucket.token", request.bitbucketToken());
+        }
+
+        return ResponseEntity.ok().build();
+    }
 
     /**
      * Lista configurações de um projeto.
@@ -116,5 +157,22 @@ public class ConfigurationController {
                 "review.include_summary", "true"
         );
         return ResponseEntity.ok(defaults);
+    }
+
+    private Long getUserIdFromPrincipal(java.security.Principal principal) {
+        if (principal == null) {
+            throw new AuthenticationCredentialsNotFoundException(
+                    "No authentication principal found");
+        }
+        String name = principal.getName();
+        if (name != null) {
+            try {
+                return Long.parseLong(name);
+            } catch (NumberFormatException e) {
+                log.debug("Principal name is not a numeric user ID: {}", name);
+            }
+        }
+        throw new AuthenticationCredentialsNotFoundException(
+                "Unable to extract user ID from authentication principal");
     }
 }

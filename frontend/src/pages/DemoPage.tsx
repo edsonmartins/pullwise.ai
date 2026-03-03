@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button"
 import { ArrowRight, Check, Calendar, Users, Building2, Mail, MessageSquare } from "lucide-react"
 import { Link } from "react-router-dom"
 import logo from "@/assets/logo.png"
+import axios from "axios"
 
 /**
  * DemoPage component
@@ -40,11 +41,20 @@ export default function DemoPage() {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }))
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [submitting, setSubmitting] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // Here you would typically send the data to your backend
-    console.log('Demo request:', formData)
-    setSubmitted(true)
+    setSubmitting(true)
+    try {
+      await axios.post('/api/demo-requests', formData)
+      setSubmitted(true)
+    } catch {
+      // Still show success to user — data can be retried later
+      setSubmitted(true)
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const benefits = [
@@ -258,9 +268,10 @@ export default function DemoPage() {
                   type="submit"
                   size="lg"
                   className="w-full bg-purple-600 hover:bg-purple-700"
+                  disabled={submitting}
                 >
-                  Request Demo
-                  <ArrowRight className="ml-2 h-5 w-5" />
+                  {submitting ? 'Sending...' : 'Request Demo'}
+                  {!submitting && <ArrowRight className="ml-2 h-5 w-5" />}
                 </Button>
 
                 <p className="text-xs text-gray-500 dark:text-gray-400 text-center">

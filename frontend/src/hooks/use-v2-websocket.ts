@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { io, Socket } from 'socket.io-client'
+import { notifications } from '@mantine/notifications'
 import { useV2Store } from '@/store/v2-store'
 
 const WS_URL = import.meta.env.VITE_WS_URL || 'http://localhost:8080'
@@ -249,20 +250,45 @@ export function useV2WebSocket(autoConnect = true) {
 
 // Helper functions for notifications
 function showErrorNotification(message: string) {
-  // In a real app, this would use a toast notification system
-  console.error('[Notification]', message)
+  notifications.show({
+    title: 'Review Error',
+    message,
+    color: 'red',
+    autoClose: 8000,
+  })
 }
 
 function showSuccessNotification(message: string) {
-  console.log('[Notification]', message)
+  notifications.show({
+    title: 'Success',
+    message,
+    color: 'green',
+    autoClose: 5000,
+  })
 }
 
 function showIssueNotification(issue: IssueDetectedMessage['issue']) {
-  console.log(`[Issue Found - ${issue.severity}]`, issue.title, 'at', issue.filePath)
+  const colorMap: Record<string, string> = {
+    CRITICAL: 'red',
+    HIGH: 'orange',
+    MEDIUM: 'yellow',
+    LOW: 'blue',
+  }
+  notifications.show({
+    title: `Issue Found: ${issue.severity}`,
+    message: `${issue.title} at ${issue.filePath}:${issue.lineStart}`,
+    color: colorMap[issue.severity] || 'gray',
+    autoClose: 6000,
+  })
 }
 
 function showAnnouncement(message: string, type: string) {
-  console.log(`[Announcement - ${type}]`, message)
+  notifications.show({
+    title: 'Announcement',
+    message,
+    color: type === 'warning' ? 'orange' : type === 'error' ? 'red' : 'blue',
+    autoClose: 10000,
+  })
 }
 
 // Types

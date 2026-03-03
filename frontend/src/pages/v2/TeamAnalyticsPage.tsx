@@ -123,107 +123,21 @@ export function TeamAnalyticsPage() {
   const [selectedTimeRange, setSelectedTimeRange] = useState('30d')
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null)
 
-  const { refetch } = useQuery({
+  const { data: apiData, refetch } = useQuery<TeamAnalyticsData>({
     queryKey: ['teamAnalytics', selectedTimeRange],
     queryFn: () => analyticsApi.getTeamStats(),
   })
 
-  // Mock data for demonstration
-  const mockData: TeamAnalyticsData = {
-    teams: [
-      {
-        teamId: 'team-1',
-        teamName: 'Platform Core',
-        members: [
-          { id: 'u1', name: 'Alice Silva', role: 'Tech Lead', stats: { reviews: 45, issuesFound: 123, avgReviewTime: 180, quality: 92, autoFixApplied: 56 } },
-          { id: 'u2', name: 'Bob Santos', role: 'Senior Dev', stats: { reviews: 38, issuesFound: 87, avgReviewTime: 210, quality: 88, autoFixApplied: 42 } },
-          { id: 'u3', name: 'Carol Lima', role: 'Senior Dev', stats: { reviews: 52, issuesFound: 145, avgReviewTime: 165, quality: 94, autoFixApplied: 68 } },
-          { id: 'u4', name: 'David Costa', role: 'Dev', stats: { reviews: 28, issuesFound: 64, avgReviewTime: 240, quality: 82, autoFixApplied: 34 } },
-        ],
-        stats: {
-          totalReviews: 163,
-          totalIssues: 419,
-          criticalIssues: 12,
-          avgReviewTime: 199,
-          avgQuality: 89,
-          autoFixRate: 0.68,
-          prsReviewed: 89,
-          codeCoverage: 78,
-        },
-        performance: {
-          velocity: 85,
-          efficiency: 78,
-          quality: 92,
-          collaboration: 88,
-          innovation: 72,
-        },
-      },
-      {
-        teamId: 'team-2',
-        teamName: 'Frontend Squad',
-        members: [
-          { id: 'u5', name: 'Eva Oliveira', role: 'Tech Lead', stats: { reviews: 41, issuesFound: 98, avgReviewTime: 175, quality: 90, autoFixApplied: 51 } },
-          { id: 'u6', name: 'Frank Mendes', role: 'Senior Dev', stats: { reviews: 35, issuesFound: 76, avgReviewTime: 195, quality: 86, autoFixApplied: 39 } },
-          { id: 'u7', name: 'Grace Almeida', role: 'Dev', stats: { reviews: 29, issuesFound: 58, avgReviewTime: 220, quality: 84, autoFixApplied: 32 } },
-        ],
-        stats: {
-          totalReviews: 105,
-          totalIssues: 232,
-          criticalIssues: 8,
-          avgReviewTime: 197,
-          avgQuality: 87,
-          autoFixRate: 0.62,
-          prsReviewed: 67,
-          codeCoverage: 82,
-        },
-        performance: {
-          velocity: 78,
-          efficiency: 82,
-          quality: 88,
-          collaboration: 92,
-          innovation: 85,
-        },
-      },
-      {
-        teamId: 'team-3',
-        teamName: 'Backend Services',
-        members: [
-          { id: 'u8', name: 'Henry Pereira', role: 'Tech Lead', stats: { reviews: 48, issuesFound: 134, avgReviewTime: 170, quality: 91, autoFixApplied: 59 } },
-          { id: 'u9', name: 'Iris Rodrigues', role: 'Senior Dev', stats: { reviews: 43, issuesFound: 112, avgReviewTime: 185, quality: 89, autoFixApplied: 47 } },
-          { id: 'u10', name: 'Jack Ferreira', role: 'Senior Dev', stats: { reviews: 39, issuesFound: 95, avgReviewTime: 200, quality: 87, autoFixApplied: 41 } },
-          { id: 'u11', name: 'Kate Barbosa', role: 'Dev', stats: { reviews: 25, issuesFound: 52, avgReviewTime: 235, quality: 80, autoFixApplied: 28 } },
-        ],
-        stats: {
-          totalReviews: 155,
-          totalIssues: 393,
-          criticalIssues: 15,
-          avgReviewTime: 198,
-          avgQuality: 87,
-          autoFixRate: 0.65,
-          prsReviewed: 82,
-          codeCoverage: 71,
-        },
-        performance: {
-          velocity: 82,
-          efficiency: 75,
-          quality: 89,
-          collaboration: 85,
-          innovation: 78,
-        },
-      },
-    ],
+  const emptyData: TeamAnalyticsData = {
+    teams: [],
     trends: [],
     comparisons: [],
-    leaderboard: [
-      { userId: 'u3', userName: 'Carol Lima', teamId: 'team-1', teamName: 'Platform Core', score: 94, reviews: 52, issuesFound: 145, quality: 94 },
-      { userId: 'u8', userName: 'Henry Pereira', teamId: 'team-3', teamName: 'Backend Services', score: 91, reviews: 48, issuesFound: 134, quality: 91 },
-      { userId: 'u1', userName: 'Alice Silva', teamId: 'team-1', teamName: 'Platform Core', score: 92, reviews: 45, issuesFound: 123, quality: 92 },
-      { userId: 'u5', userName: 'Eva Oliveira', teamId: 'team-2', teamName: 'Frontend Squad', score: 90, reviews: 41, issuesFound: 98, quality: 90 },
-      { userId: 'u9', userName: 'Iris Rodrigues', teamId: 'team-3', teamName: 'Backend Services', score: 89, reviews: 43, issuesFound: 112, quality: 89 },
-    ],
+    leaderboard: [],
   }
 
-  const teamsData = mockData.teams
+  const teamData = apiData || emptyData
+
+  const teamsData = teamData.teams
   const selectedTeamData = selectedTeam
     ? teamsData.find(t => t.teamId === selectedTeam)
     : teamsData[0]
@@ -317,7 +231,7 @@ export function TeamAnalyticsPage() {
         />
         <StatCard
           label="Qualidade Média"
-          value={`${Math.round(teamsData.reduce((sum, t) => sum + t.stats.avgQuality, 0) / teamsData.length)}%`}
+          value={`${teamsData.length > 0 ? Math.round(teamsData.reduce((sum, t) => sum + t.stats.avgQuality, 0) / teamsData.length) : 0}%`}
           icon={<IconTrophy size={20} />}
           color="green"
         />
@@ -537,7 +451,7 @@ export function TeamAnalyticsPage() {
           <Card padding="lg" withBorder>
             <Title order={5} mb="md">Ranking de Desenvolvedores</Title>
             <Stack gap="sm">
-              {mockData.leaderboard.map((entry, index) => (
+              {teamData.leaderboard.map((entry, index) => (
                 <LeaderboardItem key={entry.userId} entry={entry} rank={index + 1} />
               ))}
             </Stack>

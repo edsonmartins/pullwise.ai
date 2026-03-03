@@ -19,6 +19,8 @@ public interface IssueRepository extends JpaRepository<Issue, Long> {
 
     List<Issue> findByReviewId(Long reviewId);
 
+    long countByReviewId(Long reviewId);
+
     @Query("SELECT i FROM Issue i WHERE i.review.id = :reviewId AND i.isFalsePositive = false")
     List<Issue> findByReviewIdExcludingFalsePositives(@Param("reviewId") Long reviewId);
 

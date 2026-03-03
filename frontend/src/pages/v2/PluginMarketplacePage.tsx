@@ -95,18 +95,7 @@ export function PluginMarketplacePage() {
   // Update store when available plugins change
   useEffect(() => {
     if (availablePlugins.length > 0) {
-      const extendedPlugins = availablePlugins.map(p => ({
-        ...p,
-        downloads: Math.floor(Math.random() * 50000),
-        rating: 3 + Math.random() * 2,
-        ratingCount: Math.floor(Math.random() * 500),
-        lastUpdated: new Date(Date.now() - Math.random() * 90 * 24 * 60 * 60 * 1000).toISOString(),
-        verified: Math.random() > 0.7,
-        featured: Math.random() > 0.8,
-        tags: ['code-quality', 'security', 'ai'].slice(0, Math.floor(Math.random() * 3) + 1),
-        category: PLUGIN_CATEGORIES[Math.floor(Math.random() * (PLUGIN_CATEGORIES.length - 1)) + 1].value,
-      })) as PluginExtended[]
-      setPlugins(extendedPlugins)
+      setPlugins(availablePlugins)
     }
   }, [availablePlugins, setPlugins])
 

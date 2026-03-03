@@ -33,6 +33,99 @@ public class AnalyticsService {
     private final UsageRecordRepository usageRecordRepository;
 
     /**
+     * Obtém estatísticas de equipe agregadas por autor de PR.
+     * Agrupa reviews e issues por autorName dos pull requests.
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Object> getTeamStats() {
+        List<com.pullwise.api.domain.model.Review> allReviews = reviewRepository.findAll();
+
+        // Agrupar por author
+        Map<String, List<com.pullwise.api.domain.model.Review>> reviewsByAuthor = allReviews.stream()
+                .filter(r -> r.getPullRequest() != null && r.getPullRequest().getAuthorName() != null)
+                .collect(Collectors.groupingBy(r -> r.getPullRequest().getAuthorName()));
+
+        List<Map<String, Object>> members = new ArrayList<>();
+        List<Map<String, Object>> leaderboard = new ArrayList<>();
+
+        for (Map.Entry<String, List<com.pullwise.api.domain.model.Review>> entry : reviewsByAuthor.entrySet()) {
+            String authorName = entry.getKey();
+            List<com.pullwise.api.domain.model.Review> authorReviews = entry.getValue();
+
+            long totalIssues = authorReviews.stream()
+                    .mapToLong(r -> issueRepository.countByReviewId(r.getId()))
+                    .sum();
+
+            long criticalIssues = authorReviews.stream()
+                    .mapToLong(r -> issueRepository.countByReviewIdAndSeverity(r.getId(), Severity.CRITICAL))
+                    .sum();
+
+            Map<String, Object> memberStats = new HashMap<>();
+            memberStats.put("id", authorName.toLowerCase().replace(" ", "-"));
+            memberStats.put("name", authorName);
+            memberStats.put("role", "Developer");
+            memberStats.put("stats", Map.of(
+                    "reviews", authorReviews.size(),
+                    "issuesFound", totalIssues,
+                    "avgReviewTime", 0,
+                    "quality", totalIssues > 0 ? Math.max(0, 100 - (criticalIssues * 10)) : 100,
+                    "autoFixApplied", 0
+            ));
+            members.add(memberStats);
+
+            leaderboard.add(Map.of(
+                    "userId", authorName.toLowerCase().replace(" ", "-"),
+                    "userName", authorName,
+                    "teamId", "default",
+                    "teamName", "All Members",
+                    "score", totalIssues > 0 ? Math.max(0, 100 - (criticalIssues * 5)) : 100,
+                    "reviews", authorReviews.size(),
+                    "issuesFound", totalIssues,
+                    "quality", totalIssues > 0 ? Math.max(0, 100 - (criticalIssues * 10)) : 100
+            ));
+        }
+
+        // Sort leaderboard by score descending
+        leaderboard.sort((a, b) -> Long.compare(
+                ((Number) b.get("score")).longValue(),
+                ((Number) a.get("score")).longValue()
+        ));
+
+        long totalReviews = allReviews.size();
+        long totalIssues = issueRepository.count();
+
+        Map<String, Object> teamData = new HashMap<>();
+        teamData.put("teamId", "default");
+        teamData.put("teamName", "All Members");
+        teamData.put("members", members);
+        teamData.put("stats", Map.of(
+                "totalReviews", totalReviews,
+                "totalIssues", totalIssues,
+                "criticalIssues", 0,
+                "avgReviewTime", 0,
+                "avgQuality", 85,
+                "autoFixRate", 0.0,
+                "prsReviewed", pullRequestRepository.count(),
+                "codeCoverage", 0
+        ));
+        teamData.put("performance", Map.of(
+                "velocity", 80,
+                "efficiency", 75,
+                "quality", 85,
+                "collaboration", 80,
+                "innovation", 70
+        ));
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("teams", List.of(teamData));
+        result.put("trends", List.of());
+        result.put("comparisons", List.of());
+        result.put("leaderboard", leaderboard);
+
+        return result;
+    }
+
+    /**
      * Obtém métricas gerais de uma organização em um período.
      */
     @Transactional(readOnly = true)

@@ -24,7 +24,7 @@ import {
   IconExternalLink,
 } from '@tabler/icons-react'
 import { useQuery } from '@tanstack/react-query'
-import { organizationsApi } from '@/lib/api'
+import { organizationsApi, usersApi, configurationsApi } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { notifications } from '@mantine/notifications'
 import { useNavigate } from 'react-router-dom'
@@ -53,8 +53,7 @@ export function SettingsPage() {
   const handleSaveProfile = async () => {
     setProfileSaving(true)
     try {
-      // Simular chamada à API
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      await usersApi.updateProfile({ displayName: profileName })
       notifications.show({
         title: 'Sucesso',
         message: 'Perfil atualizado com sucesso',
@@ -75,8 +74,11 @@ export function SettingsPage() {
   const handleSaveIntegrations = async () => {
     setSavingIntegrations(true)
     try {
-      // Simular chamada à API
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      await configurationsApi.saveIntegrations({
+        sonarqubeUrl: sonarUrl || undefined,
+        sonarqubeToken: sonarToken || undefined,
+        openRouterKey: openRouterKey || undefined,
+      })
       notifications.show({
         title: 'Sucesso',
         message: 'Integrações salvas com sucesso',

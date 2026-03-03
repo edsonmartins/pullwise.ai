@@ -117,6 +117,15 @@ public class AnalyticsController {
     }
 
     /**
+     * Obtém estatísticas de equipe agregadas por autor de PR.
+     */
+    @GetMapping("/team")
+    public ResponseEntity<Map<String, Object>> getTeamStats(java.security.Principal principal) {
+        Map<String, Object> teamStats = analyticsService.getTeamStats();
+        return ResponseEntity.ok(teamStats);
+    }
+
+    /**
      * Obtém resumo de usage para billing.
      */
     @GetMapping("/organizations/{organizationId}/usage-summary")
