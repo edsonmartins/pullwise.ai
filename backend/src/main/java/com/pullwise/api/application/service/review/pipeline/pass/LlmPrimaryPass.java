@@ -1,7 +1,9 @@
 package com.pullwise.api.application.service.review.pipeline.pass;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pullwise.api.application.service.config.ConfigurationResolver;
 import com.pullwise.api.application.service.integration.GitHubService;
+import com.pullwise.api.domain.constants.ConfigKeys;
 import com.pullwise.api.application.service.llm.router.MultiModelLLMRouter;
 import com.pullwise.api.domain.model.Issue;
 import com.pullwise.api.domain.model.PullRequest;
@@ -36,6 +38,7 @@ public class LlmPrimaryPass {
 
     private final MultiModelLLMRouter llmRouter;
     private final ObjectMapper objectMapper;
+    private final ConfigurationResolver configurationResolver;
 
     /**
      * Executa a análise LLM primária.
@@ -158,8 +161,14 @@ public class LlmPrimaryPass {
         List<Issue> issues = new ArrayList<>();
 
         try {
+            // Resolver idioma do projeto
+            Long projectId = review.getPullRequest() != null && review.getPullRequest().getProject() != null
+                    ? review.getPullRequest().getProject().getId() : null;
+            String language = projectId != null
+                    ? configurationResolver.getConfig(projectId, ConfigKeys.REVIEW_LANGUAGE) : null;
+
             // Construir prompt para análise
-            String systemPrompt = buildSystemPrompt();
+            String systemPrompt = buildSystemPrompt(language);
             String userPrompt = buildAnalysisPrompt(filePath, changes, sastContext);
 
             // Executar análise via LLM router
@@ -182,15 +191,23 @@ public class LlmPrimaryPass {
     /**
      * Constrói o prompt do sistema para análise LLM.
      */
-    private String buildSystemPrompt() {
-        return """
-            You are an expert code reviewer. Analyze the provided code changes and identify:
+    private String buildSystemPrompt(String language) {
+        String langInstruction = resolveLanguageInstruction(language);
+        return langInstruction + """
+            You are an expert code reviewer. Think step by step when analyzing code changes.
 
-            1. **Bugs**: Logic errors, null pointer exceptions, race conditions, resource leaks
-            2. **Code Smells**: Long methods, duplicated code, confusing names, magic numbers
-            3. **Architecture Issues**: Violation of SOLID principles, tight coupling, low cohesion
-            4. **Performance Issues**: Inefficient algorithms, N+1 queries, unnecessary allocations
-            5. **Maintainability**: Complex conditions, deep nesting, large parameter lists
+            For each potential issue you find:
+            1. First, understand the context and intent of the code change
+            2. Then, reason about whether the code correctly implements that intent
+            3. Consider edge cases, error handling, and interactions with other code
+            4. Explain your reasoning clearly so the developer understands WHY it's an issue
+
+            Categories to analyze:
+            - **Bugs**: Logic errors, null pointer exceptions, race conditions, resource leaks
+            - **Code Smells**: Long methods, duplicated code, confusing names, magic numbers
+            - **Architecture Issues**: Violation of SOLID principles, tight coupling, low cohesion
+            - **Performance Issues**: Inefficient algorithms, N+1 queries, unnecessary allocations
+            - **Maintainability**: Complex conditions, deep nesting, large parameter lists
 
             Format your response as JSON:
             ```json
@@ -198,14 +215,22 @@ public class LlmPrimaryPass {
               "issues": [
                 {
                   "title": "Short descriptive title",
-                  "description": "Detailed explanation",
+                  "description": "Detailed explanation of the problem",
+                  "reasoning": "Step-by-step reasoning of how you identified this issue and why it matters",
                   "severity": "CRITICAL|HIGH|MEDIUM|LOW",
                   "line": 123,
-                  "category": "BUG|CODE_SMELL|PERFORMANCE|ARCHITECTURE"
+                  "category": "BUG|CODE_SMELL|PERFORMANCE|ARCHITECTURE",
+                  "suggestion": "Concrete suggestion for how to fix this issue"
                 }
               ]
             }
             ```
+
+            Important:
+            - Only report real issues, not stylistic preferences
+            - Be specific about line numbers and affected code
+            - Provide actionable suggestions, not vague advice
+            - Higher severity issues require stronger evidence in your reasoning
             """;
     }
 
@@ -268,12 +293,19 @@ public class LlmPrimaryPass {
                     Severity severity = parseSeverity(llmIssue.severity());
                     IssueType type = parseIssueType(llmIssue.category());
 
+                    // Enrich description with reasoning if available
+                    String description = llmIssue.description() != null ? llmIssue.description() : "";
+                    if (llmIssue.reasoning() != null && !llmIssue.reasoning().isBlank()) {
+                        description += "\n\n**Reasoning:** " + llmIssue.reasoning();
+                    }
+
                     issues.add(Issue.builder()
                             .review(review)
                             .type(type)
                             .severity(severity)
                             .title(llmIssue.title() != null ? llmIssue.title() : "Code Review Issue")
-                            .description(llmIssue.description() != null ? llmIssue.description() : "")
+                            .description(description)
+                            .suggestion(llmIssue.suggestion())
                             .filePath(filePath)
                             .lineStart(llmIssue.line() != null ? llmIssue.line() : 1)
                             .lineEnd(llmIssue.line() != null ? llmIssue.line() : 1)
@@ -318,7 +350,8 @@ public class LlmPrimaryPass {
 
     // Records for JSON deserialization
     private record LlmIssueResponse(List<LlmIssue> issues) {}
-    private record LlmIssue(String title, String description, String severity, Integer line, String category) {}
+    private record LlmIssue(String title, String description, String reasoning,
+                             String severity, Integer line, String category, String suggestion) {}
 
     /**
      * Extrai o bloco JSON de uma resposta markdown.
@@ -377,6 +410,20 @@ public class LlmPrimaryPass {
                 .source(IssueSource.LLM)
                 .createdAt(LocalDateTime.now())
                 .build();
+    }
+
+    /**
+     * Resolve instrução de idioma para o system prompt.
+     */
+    private String resolveLanguageInstruction(String language) {
+        if (language == null || language.isBlank() || "en".equalsIgnoreCase(language)) {
+            return "";
+        }
+        return switch (language.toLowerCase()) {
+            case "pt", "pt-br" -> "IMPORTANT: Write all your responses (titles, descriptions, suggestions) in Brazilian Portuguese.\n\n";
+            case "es" -> "IMPORTANT: Write all your responses (titles, descriptions, suggestions) in Spanish.\n\n";
+            default -> "IMPORTANT: Write all your responses in " + language + ".\n\n";
+        };
     }
 
     // ========== DTOs ==========

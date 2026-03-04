@@ -2,9 +2,15 @@ package com.pullwise.api.infrastructure.webhook;
 
 import com.pullwise.api.application.service.review.ReviewOrchestrator;
 import com.pullwise.api.application.service.integration.GitHubService;
+import com.pullwise.api.application.service.integration.SlashCommandService;
 import com.pullwise.api.application.service.config.ConfigurationResolver;
+import com.pullwise.api.application.service.config.RAGService;
+import com.pullwise.api.domain.constants.ConfigKeys;
+import com.pullwise.api.domain.enums.Platform;
+import com.pullwise.api.domain.model.Organization;
 import com.pullwise.api.domain.model.PullRequest;
 import com.pullwise.api.domain.model.Project;
+import com.pullwise.api.domain.repository.OrganizationRepository;
 import com.pullwise.api.domain.repository.ProjectRepository;
 import com.pullwise.api.domain.repository.PullRequestRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -21,6 +27,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -33,10 +40,13 @@ import java.util.Optional;
 public class GitHubWebhookController {
 
     private final GitHubService gitHubService;
+    private final OrganizationRepository organizationRepository;
     private final ProjectRepository projectRepository;
     private final PullRequestRepository pullRequestRepository;
     private final ReviewOrchestrator reviewOrchestrator;
     private final ConfigurationResolver configurationResolver;
+    private final SlashCommandService slashCommandService;
+    private final RAGService ragService;
     private final ObjectMapper objectMapper;
 
     @Value("${integrations.github.webhook-secret:}")
@@ -78,6 +88,10 @@ public class GitHubWebhookController {
 
                 case "installation":
                     handleInstallationEvent(webhookPayload);
+                    break;
+
+                case "issue_comment":
+                    handleIssueCommentEvent(webhookPayload);
                     break;
 
                 case "push":
@@ -143,18 +157,178 @@ public class GitHubWebhookController {
 
     /**
      * Processa eventos de instalação do GitHub App.
+     * Creates or updates the Organization and registers Projects for each repository
+     * included in the installation.
      */
     private void handleInstallationEvent(GitHubService.GitHubWebhookPayload payload) {
-        log.info("Processing GitHub App installation event");
-        // Salvar informações da instalação
+        String action = payload.getAction();
+        GitHubService.GitHubWebhookPayload.Installation installation = payload.getInstallation();
+
+        if (installation == null || installation.getAccount() == null) {
+            log.warn("Installation event missing installation or account data");
+            return;
+        }
+
+        String githubOrgId = String.valueOf(installation.getAccount().getId());
+        String orgName = installation.getAccount().getLogin();
+        Long installationId = installation.getId();
+
+        log.info("Processing GitHub App installation event: action={}, org={}, installationId={}",
+                action, orgName, installationId);
+
+        if ("deleted".equals(action)) {
+            // Deactivate all projects associated with this installation
+            organizationRepository.findByGitHubOrgId(githubOrgId).ifPresent(org -> {
+                List<Project> projects = projectRepository.findByOrganizationIdAndPlatform(
+                        org.getId(), Platform.GITHUB);
+                for (Project project : projects) {
+                    project.setIsActive(false);
+                    project.setGithubInstallationId(null);
+                    projectRepository.save(project);
+                }
+                log.info("Deactivated {} projects for uninstalled org {}", projects.size(), orgName);
+            });
+            return;
+        }
+
+        // For "created" or "new_permissions_accepted" actions: create/update org and projects
+        Organization org = organizationRepository.findByGitHubOrgId(githubOrgId)
+                .orElseGet(() -> {
+                    Organization newOrg = Organization.builder()
+                            .name(orgName)
+                            .slug(orgName.toLowerCase().replaceAll("[^a-z0-9-]", "-"))
+                            .githubOrgId(githubOrgId)
+                            .logoUrl(installation.getAccount().getAvatarUrl())
+                            .build();
+                    Organization saved = organizationRepository.save(newOrg);
+                    log.info("Created organization '{}' from GitHub App installation", orgName);
+                    return saved;
+                });
+
+        // Register each repository from the installation as a Project
+        List<GitHubService.GitHubWebhookPayload.Repository> repos = payload.getRepositories();
+        if (repos == null || repos.isEmpty()) {
+            log.debug("No repositories in installation payload for org {}", orgName);
+            return;
+        }
+
+        for (GitHubService.GitHubWebhookPayload.Repository repo : repos) {
+            String repoId = String.valueOf(repo.getId());
+            Optional<Project> existingProject = projectRepository.findByOrganizationIdAndRepositoryId(
+                    org.getId(), repoId);
+
+            if (existingProject.isPresent()) {
+                Project project = existingProject.get();
+                project.setGithubInstallationId(installationId);
+                project.setIsActive(true);
+                projectRepository.save(project);
+                log.debug("Updated existing project {} with installation ID {}", repo.getFullName(), installationId);
+            } else {
+                String repoUrl = repo.getHtmlUrl() != null
+                        ? repo.getHtmlUrl()
+                        : "https://github.com/" + repo.getFullName();
+
+                Project newProject = Project.builder()
+                        .name(repo.getName())
+                        .organization(org)
+                        .platform(Platform.GITHUB)
+                        .repositoryUrl(repoUrl)
+                        .repositoryId(repoId)
+                        .githubInstallationId(installationId)
+                        .isActive(true)
+                        .autoReviewEnabled(true)
+                        .build();
+                projectRepository.save(newProject);
+                log.info("Created project '{}' for org '{}'", repo.getFullName(), orgName);
+            }
+        }
+
+        log.info("Processed {} repositories for installation on org {}", repos.size(), orgName);
     }
 
     /**
      * Processa eventos de push.
+     * Triggers knowledge base (RAG) re-indexing for the affected project
+     * when pushes land on the default branch.
      */
     private void handlePushEvent(GitHubService.GitHubWebhookPayload payload) {
-        log.info("Processing push event");
-        // Poderia ser usado para trigger de análises
+        if (payload.getRepository() == null) {
+            log.warn("Push event missing repository data");
+            return;
+        }
+
+        String ref = payload.getRef();
+        String repoId = String.valueOf(payload.getRepository().getId());
+        String repoName = payload.getRepository().getFullName();
+
+        log.info("Processing push event for repo {} on ref {}", repoName, ref);
+
+        // Only trigger knowledge base sync for pushes to the default branch (main/master)
+        if (ref == null || !(ref.endsWith("/main") || ref.endsWith("/master"))) {
+            log.debug("Ignoring push to non-default branch: {}", ref);
+            return;
+        }
+
+        Optional<Project> projectOpt = projectRepository.findByRepositoryIdAndPlatform(
+                repoId, Platform.GITHUB);
+
+        if (projectOpt.isEmpty()) {
+            log.debug("No project found for repository {} (id={}), skipping RAG sync", repoName, repoId);
+            return;
+        }
+
+        Project project = projectOpt.get();
+
+        if (!Boolean.TRUE.equals(project.getIsActive())) {
+            log.debug("Project {} is inactive, skipping RAG sync", project.getName());
+            return;
+        }
+
+        log.info("Triggering knowledge base re-indexing for project {} (id={})", project.getName(), project.getId());
+        ragService.indexProjectDocuments(project.getId());
+    }
+
+    /**
+     * Processa eventos de comentário em issues/PRs (slash commands).
+     * GitHub envia issue_comment para comentários em PRs também.
+     */
+    private void handleIssueCommentEvent(GitHubService.GitHubWebhookPayload payload) {
+        if (!"created".equals(payload.getAction())) return;
+
+        GitHubService.GitHubWebhookPayload.Comment comment = payload.getComment();
+        GitHubService.GitHubWebhookPayload.IssueDTO issue = payload.getIssue();
+
+        if (comment == null || issue == null) return;
+
+        // Verificar se é um PR (issue_comment em PRs tem pull_request != null)
+        if (issue.getPullRequest() == null) return;
+
+        String body = comment.getBody();
+        if (!slashCommandService.containsCommand(body)) return;
+
+        log.info("Slash command detected in PR #{} comment by {}",
+                issue.getNumber(), comment.getUser() != null ? comment.getUser().getLogin() : "unknown");
+
+        // Encontrar o PR no banco
+        String repoId = String.valueOf(payload.getRepository().getId());
+        Project project = projectRepository.findByRepositoryIdAndPlatform(
+                repoId, Platform.GITHUB).orElse(null);
+
+        if (project == null) {
+            log.warn("Project not found for repo ID {}", repoId);
+            return;
+        }
+
+        PullRequest pr = pullRequestRepository.findByProjectIdAndPrNumber(
+                project.getId(), issue.getNumber()).orElse(null);
+
+        if (pr == null) {
+            log.warn("PR #{} not found for project {}", issue.getNumber(), project.getName());
+            return;
+        }
+
+        String username = comment.getUser() != null ? comment.getUser().getLogin() : "unknown";
+        slashCommandService.executeCommand(pr.getId(), body, username);
     }
 
     /**
@@ -165,7 +339,7 @@ public class GitHubWebhookController {
             return true;
         }
         return Boolean.parseBoolean(
-                configurationResolver.getConfig(project.getId(), "review.auto_post")
+                configurationResolver.getConfig(project.getId(), ConfigKeys.REVIEW_AUTO_POST)
         );
     }
 

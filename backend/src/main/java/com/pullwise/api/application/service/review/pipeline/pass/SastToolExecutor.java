@@ -809,7 +809,7 @@ public class SastToolExecutor {
             Files.walk(tempDir)
                     .sorted(Comparator.reverseOrder())
                     .forEach(path -> {
-                        try { Files.deleteIfExists(path); } catch (IOException ignored) {}
+                        try { Files.deleteIfExists(path); } catch (IOException e) { log.trace("Failed to delete temp file: {}", path); }
                     });
         } catch (IOException e) {
             log.debug("Failed to cleanup temp dir: {}", tempDir);

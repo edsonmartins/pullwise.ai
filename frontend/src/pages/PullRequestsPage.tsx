@@ -17,7 +17,7 @@ import {
 } from '@tabler/icons-react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { pullRequestsApi, reviewsApi, projectsApi } from '@/lib/api'
+import { pullRequestsApi, reviewsApi, projectsApi, type PullRequest } from '@/lib/api'
 
 export function PullRequestsPage() {
   const { id } = useParams<{ id: string }>()
@@ -40,7 +40,7 @@ export function PullRequestsPage() {
     queryFn: () => reviewsApi.list(),
   })
 
-  const getStatusBadge = (pr: any) => {
+  const getStatusBadge = (pr: PullRequest) => {
     if (pr.isMerged) return <Badge color="cyan">Merged</Badge>
     if (pr.isClosed) return <Badge color="red">Fechado</Badge>
     return <Badge color="green">Aberto</Badge>
@@ -75,8 +75,8 @@ export function PullRequestsPage() {
         ragEnabled: false,
       })
       window.location.reload()
-    } catch (error) {
-      console.error('Error starting review:', error)
+    } catch {
+      // Review start failed
     }
   }
 

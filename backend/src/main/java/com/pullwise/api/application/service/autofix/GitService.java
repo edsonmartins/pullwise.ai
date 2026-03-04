@@ -505,7 +505,7 @@ public class GitService {
                     output.append(line).append("\n");
                 }
             } catch (IOException e) {
-                // Ignore
+                log.warn("Error reading process output stream: {}", e.getMessage());
             }
         }
 

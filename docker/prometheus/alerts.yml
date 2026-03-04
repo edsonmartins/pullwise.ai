@@ -1,0 +1,98 @@
+groups:
+  - name: pullwise-api-alerts
+    rules:
+      # HighErrorRate: fires when more than 5% of requests return 5xx for 5 minutes
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(http_server_requests_seconds_count{job="pullwise-backend", status=~"5.."}[5m]))
+            /
+            sum(rate(http_server_requests_seconds_count{job="pullwise-backend"}[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          service: pullwise-backend
+        annotations:
+          summary: "High 5xx error rate on Pullwise backend"
+          description: >-
+            More than 5% of HTTP requests are returning 5xx status codes.
+            Current error rate: {{ $value | humanizePercentage }}.
+          runbook_url: "https://pullwise.ai/docs/runbooks/high-error-rate"
+
+      # SlowResponse: fires when p95 latency exceeds 5 seconds for 10 minutes
+      - alert: SlowResponse
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_server_requests_seconds_bucket{job="pullwise-backend"}[5m])) by (le)
+          ) > 5
+        for: 10m
+        labels:
+          severity: warning
+          service: pullwise-backend
+        annotations:
+          summary: "Slow API response times on Pullwise backend"
+          description: >-
+            The 95th percentile response time has exceeded 5 seconds for more than 10 minutes.
+            Current p95 latency: {{ $value | humanizeDuration }}.
+          runbook_url: "https://pullwise.ai/docs/runbooks/slow-response"
+
+  - name: pullwise-jvm-alerts
+    rules:
+      # HighMemoryUsage: fires when JVM heap exceeds 80% of max for 10 minutes
+      - alert: HighMemoryUsage
+        expr: |
+          (
+            sum(jvm_memory_used_bytes{job="pullwise-backend", area="heap"})
+            /
+            sum(jvm_memory_max_bytes{job="pullwise-backend", area="heap"})
+          ) > 0.80
+        for: 10m
+        labels:
+          severity: warning
+          service: pullwise-backend
+        annotations:
+          summary: "High JVM heap memory usage on Pullwise backend"
+          description: >-
+            JVM heap memory usage has exceeded 80% of the maximum for more than 10 minutes.
+            Current usage: {{ $value | humanizePercentage }}.
+            This may lead to OutOfMemoryError and service degradation.
+          runbook_url: "https://pullwise.ai/docs/runbooks/high-memory"
+
+  - name: pullwise-pipeline-alerts
+    rules:
+      # ReviewPipelineBacklog: fires when more than 50 reviews are pending for 15 minutes
+      - alert: ReviewPipelineBacklog
+        expr: |
+          pullwise_reviews_total{job="pullwise-backend", status="pending"} -
+          pullwise_reviews_total{job="pullwise-backend", status="completed"} -
+          pullwise_reviews_total{job="pullwise-backend", status="failed"}
+          > 50
+        for: 15m
+        labels:
+          severity: warning
+          service: pullwise-backend
+        annotations:
+          summary: "Review pipeline backlog growing on Pullwise"
+          description: >-
+            More than 50 reviews are pending in the pipeline for over 15 minutes.
+            Current backlog: {{ $value }} reviews.
+            Consider scaling workers or investigating pipeline bottlenecks.
+          runbook_url: "https://pullwise.ai/docs/runbooks/pipeline-backlog"
+
+  - name: pullwise-availability-alerts
+    rules:
+      # ServiceDown: fires when the backend is unreachable for 2 minutes
+      - alert: ServiceDown
+        expr: up{job="pullwise-backend"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: pullwise-backend
+        annotations:
+          summary: "Pullwise backend service is down"
+          description: >-
+            The Pullwise backend service has been unreachable for more than 2 minutes.
+            Prometheus cannot scrape metrics from the /actuator/prometheus endpoint.
+            Immediate investigation required.
+          runbook_url: "https://pullwise.ai/docs/runbooks/service-down"

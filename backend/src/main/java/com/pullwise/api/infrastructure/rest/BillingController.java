@@ -2,6 +2,7 @@ package com.pullwise.api.infrastructure.rest;
 
 import com.pullwise.api.application.dto.response.SubscriptionDTO;
 import com.pullwise.api.application.service.audit.Auditable;
+import com.pullwise.api.application.service.auth.AuthorizationService;
 import com.pullwise.api.application.service.billing.StripeService;
 import com.pullwise.api.domain.enums.PlanType;
 import com.pullwise.api.domain.model.Subscription;
@@ -12,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.security.Principal;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +30,7 @@ public class BillingController {
     private final StripeService stripeService;
     private final SubscriptionRepository subscriptionRepository;
     private final OrganizationRepository organizationRepository;
+    private final AuthorizationService authorizationService;
 
     /**
      * Lista preços disponíveis.
@@ -60,7 +63,10 @@ public class BillingController {
      * Obtém subscription atual da organização.
      */
     @GetMapping("/organizations/{organizationId}/subscription")
-    public ResponseEntity<SubscriptionDTO> getSubscription(@PathVariable Long organizationId) {
+    public ResponseEntity<SubscriptionDTO> getSubscription(@PathVariable Long organizationId, Principal principal) {
+        Long userId = authorizationService.getUserId(principal);
+        authorizationService.requireOrganizationMember(userId, organizationId);
+
         return subscriptionRepository
                 .findByOrganizationIdAndStatus(organizationId, "ACTIVE")
                 .map(sub -> ResponseEntity.ok(SubscriptionDTO.from(sub)))
@@ -74,7 +80,10 @@ public class BillingController {
     @Auditable(action = "START_CHECKOUT", entityType = "Subscription")
     public ResponseEntity<Map<String, String>> startCheckout(
             @PathVariable Long organizationId,
-            @RequestParam PlanType plan) {
+            @RequestParam PlanType plan,
+            Principal principal) {
+        Long userId = authorizationService.getUserId(principal);
+        authorizationService.requireOrganizationAdmin(userId, organizationId);
 
         if (plan == PlanType.FREE) {
             return ResponseEntity.badRequest().body(Map.of("error", "Cannot checkout for FREE plan"));
@@ -89,7 +98,11 @@ public class BillingController {
      * Cria sessão do portal do cliente.
      */
     @PostMapping("/organizations/{organizationId}/portal")
-    public ResponseEntity<Map<String, String>> createPortalSession(@PathVariable Long organizationId) {
+    public ResponseEntity<Map<String, String>> createPortalSession(
+            @PathVariable Long organizationId, Principal principal) {
+        Long userId = authorizationService.getUserId(principal);
+        authorizationService.requireOrganizationAdmin(userId, organizationId);
+
         return stripeService.createCustomerPortalSession(organizationId)
                 .map(url -> ResponseEntity.ok(Map.of("portalUrl", url)))
                 .orElse(ResponseEntity.status(500).body(Map.of("error", "Stripe not configured")));
@@ -100,7 +113,10 @@ public class BillingController {
      */
     @PostMapping("/organizations/{organizationId}/cancel")
     @Auditable(action = "CANCEL_SUBSCRIPTION", entityType = "Subscription")
-    public ResponseEntity<Void> cancelSubscription(@PathVariable Long organizationId) {
+    public ResponseEntity<Void> cancelSubscription(@PathVariable Long organizationId, Principal principal) {
+        Long userId = authorizationService.getUserId(principal);
+        authorizationService.requireOrganizationAdmin(userId, organizationId);
+
         boolean cancelled = stripeService.cancelSubscription(organizationId);
         return cancelled ? ResponseEntity.ok().build() : ResponseEntity.badRequest().build();
     }

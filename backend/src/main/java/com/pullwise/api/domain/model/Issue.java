@@ -80,6 +80,10 @@ public class Issue {
     @Builder.Default
     private Boolean isFalsePositive = false;
 
+    @Column(name = "acknowledged")
+    @Builder.Default
+    private Boolean acknowledged = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

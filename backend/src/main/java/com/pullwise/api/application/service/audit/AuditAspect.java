@@ -46,7 +46,9 @@ public class AuditAspect {
                 if (principal != null) {
                     try {
                         userId = Long.parseLong(principal.getName());
-                    } catch (NumberFormatException ignored) {}
+                    } catch (NumberFormatException e) {
+                        log.debug("Principal name is not a numeric ID: {}", principal.getName());
+                    }
                 }
             }
         } catch (Exception e) {

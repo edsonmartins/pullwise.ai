@@ -20,6 +20,9 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
     @Query(value = "SELECT r FROM Review r JOIN r.pullRequest p WHERE p.project.id = :projectId")
     List<Review> findByProjectId(@Param("projectId") Long projectId);
 
+    @Query(value = "SELECT r FROM Review r JOIN r.pullRequest p WHERE p.project.id IN :projectIds ORDER BY r.createdAt DESC")
+    List<Review> findByProjectIdIn(@Param("projectIds") List<Long> projectIds);
+
     List<Review> findByPullRequestId(Long pullRequestId);
 
     @Query(value = "SELECT r FROM Review r JOIN r.pullRequest pr WHERE pr.id = :prId")

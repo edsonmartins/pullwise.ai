@@ -1,9 +1,13 @@
 package com.pullwise.api.application.service.review;
 
+import com.pullwise.api.application.service.config.ConfigurationResolver;
+import com.pullwise.api.application.service.integration.AzureDevOpsService;
+import com.pullwise.api.domain.constants.ConfigKeys;
 import com.pullwise.api.application.service.integration.BitBucketService;
 import com.pullwise.api.application.service.integration.GitHubService;
 import com.pullwise.api.application.service.integration.GitLabService;
 import com.pullwise.api.domain.enums.Platform;
+import com.pullwise.api.domain.enums.Severity;
 import com.pullwise.api.domain.model.Issue;
 import com.pullwise.api.domain.model.PullRequest;
 import lombok.RequiredArgsConstructor;
@@ -26,12 +30,17 @@ public class PostingService {
     private final GitHubService gitHubService;
     private final BitBucketService bitBucketService;
     private final GitLabService gitLabService;
+    private final AzureDevOpsService azureDevOpsService;
+    private final ConfigurationResolver configurationResolver;
 
     @Value("${pullwise.review.post-as-comment:true}")
     private boolean postAsComment;
 
     @Value("${pullwise.review.include-summary:true}")
     private boolean includeSummary;
+
+    @Value("${pullwise.review.inline-comments:true}")
+    private boolean inlineCommentsEnabled;
 
     /**
      * Posta o comentário do review no PR.
@@ -58,6 +67,12 @@ public class PostingService {
                         pr.getPrNumber(),
                         comment
                 );
+            } else if (pr.getPlatform() == Platform.AZURE_DEVOPS) {
+                commentId = azureDevOpsService.postPullRequestComment(
+                        pr.getProject(),
+                        pr.getPrNumber(),
+                        comment
+                );
             } else {
                 commentId = gitHubService.postPullRequestComment(
                         pr.getProject(),
@@ -72,6 +87,82 @@ public class PostingService {
         } catch (Exception e) {
             log.error("Failed to post comment for PR {}", pr.getPrNumber(), e);
             return null;
+        }
+    }
+
+    /**
+     * Posta comentários inline nas linhas específicas do PR para issues CRITICAL e HIGH.
+     * Complementa o comentário resumo geral. Configurável por projeto.
+     */
+    public void postInlineComments(PullRequest pr, List<Issue> issues) {
+        // Verificar se inline comments está habilitado (global ou por projeto)
+        boolean enabled = inlineCommentsEnabled;
+        if (pr.getProject() != null && pr.getProject().getId() != null) {
+            String projectConfig = configurationResolver.getConfig(
+                    pr.getProject().getId(), ConfigKeys.REVIEW_INLINE_COMMENTS);
+            if (projectConfig != null) {
+                enabled = Boolean.parseBoolean(projectConfig);
+            }
+        }
+
+        if (!enabled) {
+            log.debug("Inline comments disabled for PR #{}", pr.getPrNumber());
+            return;
+        }
+
+        // Filtrar apenas issues CRITICAL e HIGH que têm localização
+        List<Issue> inlineIssues = issues.stream()
+                .filter(i -> i.getSeverity() == Severity.CRITICAL || i.getSeverity() == Severity.HIGH)
+                .filter(Issue::hasLocation)
+                .filter(i -> i.getLineStart() != null && i.getLineStart() > 0)
+                .toList();
+
+        if (inlineIssues.isEmpty()) {
+            log.debug("No CRITICAL/HIGH issues with location for inline comments on PR #{}", pr.getPrNumber());
+            return;
+        }
+
+        List<GitHubService.InlineComment> comments = inlineIssues.stream()
+                .map(issue -> {
+                    String emoji = issue.getSeverity() == Severity.CRITICAL ? "🔴" : "🟠";
+                    String body = String.format("%s **%s** [%s]\n\n%s",
+                            emoji, issue.getTitle(), issue.getSeverity().getLabel(),
+                            issue.getDescription());
+
+                    if (issue.getSuggestion() != null && !issue.getSuggestion().isBlank()) {
+                        body += String.format("\n\n**Suggestion:** %s", issue.getSuggestion());
+                    }
+
+                    if (issue.getFixedCode() != null && !issue.getFixedCode().isBlank()) {
+                        body += String.format("\n\n```suggestion\n%s\n```", issue.getFixedCode());
+                    }
+
+                    return new GitHubService.InlineComment(
+                            issue.getFilePath(), issue.getLineStart(), body);
+                })
+                .toList();
+
+        try {
+            Platform platform = pr.getPlatform();
+
+            if (platform == Platform.GITHUB) {
+                String summaryBody = String.format(
+                        "Pullwise found %d critical/high issues. See inline comments below.",
+                        comments.size());
+                gitHubService.createPullRequestReview(
+                        pr.getProject(), pr.getPrNumber(), summaryBody, comments);
+            } else if (platform == Platform.GITLAB) {
+                gitLabService.postInlineComments(pr.getProject(), pr.getPrNumber(), comments);
+            } else if (platform == Platform.BITBUCKET) {
+                bitBucketService.postInlineComments(pr.getProject(), pr.getPrId(), comments);
+            } else if (platform == Platform.AZURE_DEVOPS) {
+                azureDevOpsService.postInlineComments(pr.getProject(), pr.getPrNumber(), comments);
+            }
+
+            log.info("Posted {} inline comments for PR #{}", comments.size(), pr.getPrNumber());
+
+        } catch (Exception e) {
+            log.error("Failed to post inline comments for PR #{}: {}", pr.getPrNumber(), e.getMessage());
         }
     }
 

@@ -130,6 +130,43 @@ jobs:
           retention-days: 7
 
   # ========================================
+  # CLI CI
+  # ========================================
+  cli-build:
+    name: CLI Build & Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: cli/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./cli
+        run: npm ci
+
+      - name: Lint check
+        working-directory: ./cli
+        run: npm run lint || true
+
+      - name: Build
+        working-directory: ./cli
+        run: npm run build
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-dist
+          path: cli/dist
+          retention-days: 7
+
+  # ========================================
   # SECURITY SCANS
   # ========================================
   security-scan:

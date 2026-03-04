@@ -1,5 +1,7 @@
 package com.pullwise.api.application.service.config;
 
+import com.pullwise.api.domain.constants.ConfigKeys;
+import com.pullwise.api.domain.converter.EncryptedStringConverter;
 import com.pullwise.api.domain.model.Configuration;
 import com.pullwise.api.domain.model.Organization;
 import com.pullwise.api.domain.model.Project;
@@ -11,6 +13,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Serviço de resolução de configurações hierárquicas.
@@ -21,7 +24,13 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class ConfigurationResolver {
 
+    private static final Set<String> SENSITIVE_KEYS = Set.of(
+            ConfigKeys.SONARQUBE_TOKEN, ConfigKeys.LLM_API_KEY, ConfigKeys.BITBUCKET_TOKEN,
+            ConfigKeys.GITHUB_TOKEN, ConfigKeys.GITLAB_TOKEN, ConfigKeys.OPENROUTER_API_KEY
+    );
+
     private final ConfigurationRepository configurationRepository;
+    private final EncryptedStringConverter encryptedStringConverter = new EncryptedStringConverter();
 
     /**
      * Busca uma configuração com resolução hierárquica.
@@ -61,7 +70,7 @@ public class ConfigurationResolver {
      */
     private Optional<String> getProjectConfig(Long projectId, String key) {
         return configurationRepository.findByProjectIdAndScopeAndKey(projectId, "PROJECT", key)
-                .map(Configuration::getValue);
+                .map(config -> decryptIfSensitive(config));
     }
 
     /**
@@ -78,7 +87,14 @@ public class ConfigurationResolver {
      */
     public Optional<String> getOrgConfig(Long orgId, String key) {
         return configurationRepository.findByOrganizationIdAndScopeAndKey(orgId, "ORGANIZATION", key)
-                .map(Configuration::getValue);
+                .map(config -> decryptIfSensitive(config));
+    }
+
+    private String decryptIfSensitive(Configuration config) {
+        if (Boolean.TRUE.equals(config.getIsSensitive())) {
+            return encryptedStringConverter.convertToEntityAttribute(config.getValue());
+        }
+        return config.getValue();
     }
 
     /**
@@ -86,13 +102,13 @@ public class ConfigurationResolver {
      */
     private String getDefaultValue(String key) {
         return switch (key) {
-            case "sast.enabled" -> "true";
-            case "llm.enabled" -> "true";
-            case "llm.provider" -> "openrouter";
-            case "llm.model" -> "anthropic/claude-3-haiku";
-            case "rag.enabled" -> "false";
-            case "review.auto_post" -> "true";
-            case "review.include_summary" -> "true";
+            case ConfigKeys.SAST_ENABLED -> "true";
+            case ConfigKeys.LLM_ENABLED -> "true";
+            case ConfigKeys.LLM_PROVIDER -> "openrouter";
+            case ConfigKeys.LLM_MODEL -> "anthropic/claude-3-haiku";
+            case ConfigKeys.RAG_ENABLED -> "false";
+            case ConfigKeys.REVIEW_AUTO_POST -> "true";
+            case ConfigKeys.REVIEW_INCLUDE_SUMMARY -> "true";
             default -> null;
         };
     }
@@ -101,49 +117,53 @@ public class ConfigurationResolver {
      * Verifica se SAST está habilitado para um projeto.
      */
     public boolean isSastEnabled(Long projectId) {
-        return Boolean.parseBoolean(getConfig(projectId, "sast.enabled"));
+        return Boolean.parseBoolean(getConfig(projectId, ConfigKeys.SAST_ENABLED));
     }
 
     /**
      * Verifica se LLM está habilitado para um projeto.
      */
     public boolean isLLMEnabled(Long projectId) {
-        return Boolean.parseBoolean(getConfig(projectId, "llm.enabled"));
+        return Boolean.parseBoolean(getConfig(projectId, ConfigKeys.LLM_ENABLED));
     }
 
     /**
      * Verifica se RAG está habilitado para um projeto.
      */
     public boolean isRAGEnabled(Long projectId) {
-        return Boolean.parseBoolean(getConfig(projectId, "rag.enabled"));
+        return Boolean.parseBoolean(getConfig(projectId, ConfigKeys.RAG_ENABLED));
     }
 
     /**
      * Retorna o provider LLM configurado.
      */
     public String getLLMProvider(Long projectId) {
-        return getConfig(projectId, "llm.provider");
+        return getConfig(projectId, ConfigKeys.LLM_PROVIDER);
     }
 
     /**
      * Retorna o modelo LLM configurado.
      */
     public String getLLMModel(Long projectId) {
-        return getConfig(projectId, "llm.model");
+        return getConfig(projectId, ConfigKeys.LLM_MODEL);
     }
 
     /**
      * Salva uma configuração no nível do projeto.
      */
     public Configuration saveProjectConfig(Project project, String key, String value) {
+        boolean sensitive = SENSITIVE_KEYS.contains(key);
+        String storedValue = sensitive ? encryptedStringConverter.convertToDatabaseColumn(value) : value;
+
         return configurationRepository.save(
                 Configuration.builder()
                         .project(project)
                         .organization(project.getOrganization())
                         .scope("PROJECT")
                         .key(key)
-                        .value(value)
+                        .value(storedValue)
                         .valueType(inferValueType(value))
+                        .isSensitive(sensitive)
                         .build()
         );
     }
@@ -152,13 +172,17 @@ public class ConfigurationResolver {
      * Salva uma configuração no nível da organização.
      */
     public Configuration saveOrgConfig(Organization organization, String key, String value) {
+        boolean sensitive = SENSITIVE_KEYS.contains(key);
+        String storedValue = sensitive ? encryptedStringConverter.convertToDatabaseColumn(value) : value;
+
         return configurationRepository.save(
                 Configuration.builder()
                         .organization(organization)
                         .scope("ORGANIZATION")
                         .key(key)
-                        .value(value)
+                        .value(storedValue)
                         .valueType(inferValueType(value))
+                        .isSensitive(sensitive)
                         .build()
         );
     }

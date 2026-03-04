@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pullwise.api.application.dto.BitBucketWebhookPayload;
 import com.pullwise.api.application.service.config.ConfigurationResolver;
+import com.pullwise.api.domain.constants.ConfigKeys;
 import com.pullwise.api.domain.model.Project;
 import com.pullwise.api.domain.model.PullRequest;
 import com.pullwise.api.domain.model.User;
@@ -303,6 +304,44 @@ public class BitBucketService {
     }
 
     /**
+     * Posta comentários inline em um PR do BitBucket.
+     * POST /2.0/repositories/{workspace}/{repo_slug}/pullrequests/{id}/comments
+     * com inline.path e inline.to para posicionar o comentário.
+     */
+    public void postInlineComments(Project project, Long prId,
+                                    List<GitHubService.InlineComment> comments) {
+        String[] repoInfo = extractWorkspaceAndSlug(project);
+        if (repoInfo == null) return;
+
+        for (GitHubService.InlineComment comment : comments) {
+            String url = String.format("%s/repositories/%s/%s/pullrequests/%d/comments",
+                    BITBUCKET_API, repoInfo[0], repoInfo[1], prId);
+
+            try {
+                Map<String, Object> body = Map.of(
+                        "content", Map.of("raw", comment.body()),
+                        "inline", Map.of(
+                                "path", comment.path(),
+                                "to", comment.line()
+                        )
+                );
+
+                HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, createAuthHeaders(project));
+                ResponseEntity<String> response = restTemplate.exchange(
+                        url, HttpMethod.POST, entity, String.class);
+
+                if (response.getStatusCode().is2xxSuccessful()) {
+                    log.debug("Posted inline comment on BitBucket PR #{} at {}:{}",
+                            prId, comment.path(), comment.line());
+                }
+            } catch (Exception e) {
+                log.warn("Failed to post inline comment on BitBucket PR #{} at {}:{}: {}",
+                        prId, comment.path(), comment.line(), e.getMessage());
+            }
+        }
+    }
+
+    /**
      * Cria headers de autenticação para a API do BitBucket.
      * Usa App Password via Basic Auth com token da configuração.
      */
@@ -312,7 +351,7 @@ public class BitBucketService {
 
         String token = null;
         if (project != null && project.getId() != null) {
-            token = configurationResolver.getConfig(project.getId(), "bitbucket.token");
+            token = configurationResolver.getConfig(project.getId(), ConfigKeys.BITBUCKET_TOKEN);
         }
         if (token != null && !token.isBlank()) {
             headers.setBearerAuth(token);

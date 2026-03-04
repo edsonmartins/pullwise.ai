@@ -3,7 +3,9 @@ package com.pullwise.api.infrastructure.rest;
 import com.pullwise.api.application.dto.request.SaveIntegrationsRequest;
 import com.pullwise.api.application.dto.request.UpdateConfigurationRequest;
 import com.pullwise.api.application.dto.response.ConfigurationDTO;
+import com.pullwise.api.application.service.auth.AuthorizationService;
 import com.pullwise.api.application.service.config.ConfigurationResolver;
+import com.pullwise.api.domain.constants.ConfigKeys;
 import com.pullwise.api.domain.model.Configuration;
 import com.pullwise.api.domain.model.Organization;
 import com.pullwise.api.domain.model.Project;
@@ -15,7 +17,6 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -33,6 +34,7 @@ public class ConfigurationController {
     private final ProjectRepository projectRepository;
     private final UserRepository userRepository;
     private final ConfigurationResolver configurationResolver;
+    private final AuthorizationService authorizationService;
 
     /**
      * Salva configurações de integrações (SonarQube, OpenRouter, BitBucket).
@@ -43,27 +45,26 @@ public class ConfigurationController {
             @Valid @RequestBody SaveIntegrationsRequest request,
             java.security.Principal principal) {
 
-        Long userId = getUserIdFromPrincipal(principal);
+        Long userId = authorizationService.getUserId(principal);
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
-        // Usar a primeira organização do usuário
         Organization org = user.getMemberships().stream()
                 .map(com.pullwise.api.domain.model.OrganizationMember::getOrganization)
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("User has no organization"));
 
         if (request.sonarqubeUrl() != null) {
-            configurationResolver.saveOrgConfig(org, "sonarqube.url", request.sonarqubeUrl());
+            configurationResolver.saveOrgConfig(org, ConfigKeys.SONARQUBE_URL, request.sonarqubeUrl());
         }
         if (request.sonarqubeToken() != null) {
-            configurationResolver.saveOrgConfig(org, "sonarqube.token", request.sonarqubeToken());
+            configurationResolver.saveOrgConfig(org, ConfigKeys.SONARQUBE_TOKEN, request.sonarqubeToken());
         }
         if (request.openRouterKey() != null) {
-            configurationResolver.saveOrgConfig(org, "llm.api_key", request.openRouterKey());
+            configurationResolver.saveOrgConfig(org, ConfigKeys.LLM_API_KEY, request.openRouterKey());
         }
         if (request.bitbucketToken() != null) {
-            configurationResolver.saveOrgConfig(org, "bitbucket.token", request.bitbucketToken());
+            configurationResolver.saveOrgConfig(org, ConfigKeys.BITBUCKET_TOKEN, request.bitbucketToken());
         }
 
         return ResponseEntity.ok().build();
@@ -73,7 +74,11 @@ public class ConfigurationController {
      * Lista configurações de um projeto.
      */
     @GetMapping("/projects/{projectId}")
-    public ResponseEntity<List<ConfigurationDTO>> getProjectConfigurations(@PathVariable Long projectId) {
+    public ResponseEntity<List<ConfigurationDTO>> getProjectConfigurations(
+            @PathVariable Long projectId, java.security.Principal principal) {
+        Long userId = authorizationService.getUserId(principal);
+        authorizationService.requireProjectAccess(userId, projectId);
+
         List<Configuration> configs = configurationRepository.findByProjectId(projectId);
         List<ConfigurationDTO> dtos = configs.stream()
                 .map(ConfigurationDTO::from)
@@ -85,7 +90,11 @@ public class ConfigurationController {
      * Lista configurações de uma organização.
      */
     @GetMapping("/organizations/{orgId}")
-    public ResponseEntity<List<ConfigurationDTO>> getOrganizationConfigurations(@PathVariable Long orgId) {
+    public ResponseEntity<List<ConfigurationDTO>> getOrganizationConfigurations(
+            @PathVariable Long orgId, java.security.Principal principal) {
+        Long userId = authorizationService.getUserId(principal);
+        authorizationService.requireOrganizationMember(userId, orgId);
+
         List<Configuration> configs = configurationRepository.findByOrganizationId(orgId);
         List<ConfigurationDTO> dtos = configs.stream()
                 .map(ConfigurationDTO::from)
@@ -99,7 +108,11 @@ public class ConfigurationController {
     @GetMapping("/projects/{projectId}/{key}")
     public ResponseEntity<String> getProjectConfig(
             @PathVariable Long projectId,
-            @PathVariable String key) {
+            @PathVariable String key,
+            java.security.Principal principal) {
+        Long userId = authorizationService.getUserId(principal);
+        authorizationService.requireProjectAccess(userId, projectId);
+
         String value = configurationResolver.getConfig(projectId, key);
         return ResponseEntity.ok(value);
     }
@@ -110,7 +123,10 @@ public class ConfigurationController {
     @PutMapping("/projects/{projectId}")
     public ResponseEntity<List<ConfigurationDTO>> updateProjectConfigurations(
             @PathVariable Long projectId,
-            @Valid @RequestBody UpdateConfigurationRequest request) {
+            @Valid @RequestBody UpdateConfigurationRequest request,
+            java.security.Principal principal) {
+        Long userId = authorizationService.getUserId(principal);
+        authorizationService.requireProjectAccess(userId, projectId);
 
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new IllegalArgumentException("Project not found"));
@@ -148,31 +164,15 @@ public class ConfigurationController {
     @GetMapping("/defaults")
     public ResponseEntity<java.util.Map<String, String>> getDefaultConfigurations() {
         java.util.Map<String, String> defaults = java.util.Map.of(
-                "sast.enabled", "true",
-                "llm.enabled", "true",
-                "llm.provider", "openrouter",
-                "llm.model", "anthropic/claude-3-haiku",
-                "rag.enabled", "false",
-                "review.auto_post", "true",
-                "review.include_summary", "true"
+                ConfigKeys.SAST_ENABLED, "true",
+                ConfigKeys.LLM_ENABLED, "true",
+                ConfigKeys.LLM_PROVIDER, "openrouter",
+                ConfigKeys.LLM_MODEL, "anthropic/claude-3-haiku",
+                ConfigKeys.RAG_ENABLED, "false",
+                ConfigKeys.REVIEW_AUTO_POST, "true",
+                ConfigKeys.REVIEW_INCLUDE_SUMMARY, "true"
         );
         return ResponseEntity.ok(defaults);
     }
 
-    private Long getUserIdFromPrincipal(java.security.Principal principal) {
-        if (principal == null) {
-            throw new AuthenticationCredentialsNotFoundException(
-                    "No authentication principal found");
-        }
-        String name = principal.getName();
-        if (name != null) {
-            try {
-                return Long.parseLong(name);
-            } catch (NumberFormatException e) {
-                log.debug("Principal name is not a numeric user ID: {}", name);
-            }
-        }
-        throw new AuthenticationCredentialsNotFoundException(
-                "Unable to extract user ID from authentication principal");
-    }
 }

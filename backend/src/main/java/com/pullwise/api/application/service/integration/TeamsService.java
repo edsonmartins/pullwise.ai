@@ -2,6 +2,7 @@ package com.pullwise.api.application.service.integration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pullwise.api.application.service.config.ConfigurationResolver;
+import com.pullwise.api.domain.constants.ConfigKeys;
 import com.pullwise.api.domain.enums.Severity;
 import com.pullwise.api.domain.model.Issue;
 import com.pullwise.api.domain.model.Review;
@@ -36,7 +37,7 @@ public class TeamsService {
     @Value("${integrations.teams.default-webhook-url:}")
     private String defaultWebhookUrl;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
     private final ConfigurationResolver configurationResolver;
 
@@ -68,7 +69,7 @@ public class TeamsService {
         }
 
         // Verificar filtro de severidade
-        String notifyOn = configurationResolver.getConfig(projectId, "teams.notify-on");
+        String notifyOn = configurationResolver.getConfig(projectId, ConfigKeys.TEAMS_NOTIFY_ON);
         if (notifyOn == null) notifyOn = "all";
 
         if (!shouldNotify(notifyOn, issues)) {
@@ -104,7 +105,7 @@ public class TeamsService {
     // ========== Private Helpers ==========
 
     private String resolveWebhookUrl(Long projectId) {
-        String projectUrl = configurationResolver.getConfig(projectId, "teams.webhook-url");
+        String projectUrl = configurationResolver.getConfig(projectId, ConfigKeys.TEAMS_WEBHOOK_URL);
         if (projectUrl != null && !projectUrl.isBlank()) {
             return projectUrl;
         }

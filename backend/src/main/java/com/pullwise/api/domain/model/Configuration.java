@@ -1,5 +1,6 @@
 package com.pullwise.api.domain.model;
 
+import com.pullwise.api.domain.constants.ConfigKeys;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -78,7 +79,7 @@ public class Configuration {
     public static Configuration sastEnabled(String scope, boolean enabled) {
         return Configuration.builder()
                 .scope(scope)
-                .key("sast.enabled")
+                .key(ConfigKeys.SAST_ENABLED)
                 .value(String.valueOf(enabled))
                 .valueType("BOOLEAN")
                 .build();
@@ -87,7 +88,7 @@ public class Configuration {
     public static Configuration llmEnabled(String scope, boolean enabled) {
         return Configuration.builder()
                 .scope(scope)
-                .key("llm.enabled")
+                .key(ConfigKeys.LLM_ENABLED)
                 .value(String.valueOf(enabled))
                 .valueType("BOOLEAN")
                 .build();
@@ -96,7 +97,7 @@ public class Configuration {
     public static Configuration llmProvider(String scope, String provider) {
         return Configuration.builder()
                 .scope(scope)
-                .key("llm.provider")
+                .key(ConfigKeys.LLM_PROVIDER)
                 .value(provider)
                 .valueType("STRING")
                 .build();
@@ -105,7 +106,7 @@ public class Configuration {
     public static Configuration llmModel(String scope, String model) {
         return Configuration.builder()
                 .scope(scope)
-                .key("llm.model")
+                .key(ConfigKeys.LLM_MODEL)
                 .value(model)
                 .valueType("STRING")
                 .build();
@@ -114,7 +115,7 @@ public class Configuration {
     public static Configuration ragEnabled(String scope, boolean enabled) {
         return Configuration.builder()
                 .scope(scope)
-                .key("rag.enabled")
+                .key(ConfigKeys.RAG_ENABLED)
                 .value(String.valueOf(enabled))
                 .valueType("BOOLEAN")
                 .build();

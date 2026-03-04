@@ -24,6 +24,9 @@ public class BitBucketWebhookPayload {
     @JsonProperty("repository")
     private Repository repository;
 
+    @JsonProperty("comment")
+    private Comment comment;
+
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class PullRequest {
@@ -170,5 +173,25 @@ public class BitBucketWebhookPayload {
 
         @JsonProperty("commits")
         private CommitsLink commits;
+    }
+
+    @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class Comment {
+        private Long id;
+
+        @JsonProperty("content")
+        private CommentContent content;
+
+        @JsonProperty("user")
+        private Actor user;
+    }
+
+    @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class CommentContent {
+        private String raw;
+        private String markup;
+        private String html;
     }
 }

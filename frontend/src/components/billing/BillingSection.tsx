@@ -319,7 +319,7 @@ export function BillingSection({
 
                   {isUpgrade && !isCurrentPlan ? (
                     <Button
-                      color={plan.color as any}
+                      color={plan.color}
                       fullWidth
                       onClick={() => handleUpgrade(planKey)}
                       loading={loadingCheckout}

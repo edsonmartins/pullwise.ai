@@ -7,236 +7,263 @@
   **The Open Code Review Platform**
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
-  [![Docker](https://img.shields.io/badge/docker-pull-blue.svg)](https://hub.docker.com/r/pullwise/pullwise-ce)
+  [![CI/CD](https://github.com/integralltech/pullwise-ai/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/integralltech/pullwise-ai/actions)
   [![GitHub Stars](https://img.shields.io/github/stars/integralltech/pullwise-ai?style=social)](https://github.com/integralltech/pullwise-ai)
 
   [Website](https://pullwise.ai) • [Docs](https://docs.pullwise.ai) • [Demo](https://pullwise.ai/demo) • [Discord](https://discord.gg/pullwise)
 
-  **"Start free, scale enterprise."**
-
-  Production-Grade. Free Forever. MIT Licensed.
+  **Production-Grade. Free Forever. MIT Licensed.**
 
 </div>
 
 ---
 
-## 🦉 What is Pullwise?
+## What is Pullwise?
 
 Pullwise is an **open-source, self-hosted AI code review platform** that combines static analysis (SAST) with large language models (LLMs) to provide intelligent, automated code reviews.
 
-### 🎯 The Problem
+### The Problem
 
 Code reviews are essential for software quality, but they're:
-- **Time-consuming** - Senior developers spend hours reviewing PRs
-- **Inconsistent** - Different reviewers catch different issues
-- **Expensive** - Enterprise tools cost thousands per month
-- **Vendor lock-in** - Proprietary solutions trap your data
+- **Time-consuming** — Senior developers spend hours reviewing PRs
+- **Inconsistent** — Different reviewers catch different issues
+- **Expensive** — Enterprise tools cost thousands per month
+- **Vendor lock-in** — Proprietary solutions trap your data
 
-### ✨ The Solution
+### The Solution
 
 **Pullwise Community Edition (MIT Licensed):**
-- **Free forever** - No credit card, no time limits
-- **Self-hosted** - Your code never leaves your infrastructure
-- **AI-Powered** - Multi-model LLM support (GPT-4, Claude, local models)
-- **SAST Integration** - SonarQube, ESLint, Checkstyle, PMD, SpotBugs
-- **Auto-Fix** - One-click apply suggestions
-- **200+ Plugins** - Community-driven extensions
+- **Free forever** — No credit card, no time limits
+- **Self-hosted** — Your code never leaves your infrastructure
+- **AI-Powered** — Multi-model LLM support (Claude, GPT-4, local models via Ollama)
+- **SAST Integration** — SonarQube, ESLint, Checkstyle, PMD, SpotBugs
+- **Multi-Platform** — GitHub, GitLab, BitBucket, Azure DevOps
+- **Auto-Fix** — One-click apply AI suggestions
+- **IDE Support** — VS Code extension and IntelliJ IDEA plugin
+- **CLI** — Full-featured command-line interface (`pullwise` / `pw`)
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
-### 5-Minute Setup with Docker
+### Docker Compose (recommended)
 
 ```bash
 # Clone the repository
 git clone https://github.com/integralltech/pullwise-ai.git
-cd pullwise-ai/frontend
-
-# Download the docker-compose.yml
-wget https://pullwise.ai/docker-compose.yml
+cd pullwise-ai
 
 # Start all services
 docker-compose up -d
 
 # Access Pullwise
-open http://localhost:8080
+# Frontend: http://localhost:3000
+# Backend API: http://localhost:8080
 ```
 
-That's it! Pullwise is now running with:
-- PostgreSQL database
-- Redis cache
-- Ollama (local LLM)
-- Pullwise CE
+This starts PostgreSQL (with pgvector), Redis, RabbitMQ, the backend, and the frontend.
+
+To include monitoring (Prometheus, Grafana, Jaeger):
+
+```bash
+docker-compose --profile monitoring up -d
+# Grafana: http://localhost:3001
+# Prometheus: http://localhost:9090
+# Jaeger: http://localhost:16686
+```
 
 ### System Requirements
 
 - **Docker** 20.10+ and Docker Compose 2.0+
-- **2 GB RAM** minimum (4 GB recommended)
+- **4 GB RAM** minimum (8 GB recommended with monitoring)
 - **10 GB** disk space
 - **Linux**, **macOS**, or **Windows** with WSL2
 
 ---
 
-## 💎 Editions
-
-Pullwise follows the **GitLab open-core model**:
-
-| Feature | Community Edition | Professional | Enterprise | Enterprise Plus |
-|---------|------------------|-------------|------------|------------------|
-| **Price** | **FREE** | $49/dev/mo | $99/dev/mo | $149/dev/mo |
-| **License** | MIT | Proprietary | Proprietary | Proprietary |
-| **Users** | 5 | 50 | Unlimited | Unlimited |
-| **Organizations** | 1 | 3 | Unlimited | Unlimited |
-| **Pipeline** | 2-pass | 4-pass | 4-pass | 4-pass |
-| **Code Graph** | ❌ | ✅ | ✅ | ✅ |
-| **SSO/SAML** | ❌ | ✅ | ✅ | ✅ |
-| **RBAC** | ❌ | Basic | Advanced | Advanced |
-| **Audit Logs** | ❌ | 30 days | 1 year | Custom |
-| **Air-Gapped** | ❌ | ❌ | ✅ | ✅ |
-| **SLA** | Community | 48h | 4h | 1h |
-| **Source Access** | Core | ❌ | ❌ | ✅ |
-
-[→ Compare all editions](https://pullwise.ai/#comparison)
-
----
-
-## 🏗️ Architecture
+## Architecture
 
 ![Pullwise Architecture](images/arquitetura.png)
 
+**Backend:** Java 17, Spring Boot 3.2, PostgreSQL 16 (pgvector), Redis, RabbitMQ
+
+**Frontend:** React 18, TypeScript, Vite, Mantine UI, TanStack Query
+
+**CLI:** Node.js, Commander.js — `npm install -g @pullwise/cli`
+
+**IDE Extensions:** VS Code (.vsix) and IntelliJ IDEA plugin
+
 ---
 
-## 🔑 Key Features
+## Key Features
 
-### 🔍 Hybrid SAST + AI Reviews
+### Hybrid SAST + AI Reviews
 
-Pullwise combines the best of both worlds:
+Pullwise combines static analysis with AI in a multi-pass pipeline:
 
 1. **Static Analysis** (parallel execution):
    - SonarQube (bugs, vulnerabilities, code smells)
    - ESLint (JavaScript/TypeScript)
-   - Checkstyle (Java)
-   - PMD (anti-patterns)
-   - SpotBugs (bug patterns)
+   - Checkstyle, PMD, SpotBugs (Java)
 
 2. **AI Review** (with full context):
    - SAST results as baseline
-   - Code graph analysis
-   - Historical PR data
+   - Code graph analysis (dependency-aware)
+   - RAG with project knowledge base (pgvector)
    - Custom team instructions
 
 3. **Smart Consolidation**:
    - Deduplicates similar issues
-   - Prioritizes by severity
-   - Formats actionable comments
+   - Prioritizes by severity and risk
+   - Formats actionable inline comments
 
-### 🧠 Multi-Model LLM Router
+### Multi-Model LLM Router
 
-- **Cloud models**: GPT-4, Claude Sonnet, Gemini Pro via OpenRouter
+- **Cloud models**: Claude, GPT-4, Gemini Pro via OpenRouter
 - **Local models**: Llama 3, Mistral, Gemma via Ollama
-- **Cost optimization**: Auto-routes to cheapest model for task
-- **Fallback**: Graceful degradation when models fail
+- **Routing strategies**: `cost-optimized`, `quality-first`, `balanced`
+- **Fallback**: Graceful degradation when models are unavailable
 
-### 🔌 Plugin System
+### Multi-Platform Support
 
-200+ community plugins extending:
+| Platform | Webhooks | PR Comments | Status Checks |
+|----------|----------|-------------|---------------|
+| GitHub | Yes | Yes | Yes |
+| GitLab | Yes | Yes | Yes |
+| BitBucket | Yes | Yes | Yes |
+| Azure DevOps | Yes | Yes | Yes |
+
+### Auto-Fix
+
+- AI-generated fix suggestions with confidence scoring
+- Safe preview with code diff before applying
+- Batch operations for multiple issues
+- Rollback support
+
+### Plugin System
+
+Extensible via SPI-based plugin architecture:
 - Language linters (Rust, Go, Python, PHP)
 - Framework-specific rules (Laravel, Django, Spring)
 - Custom checks for your codebase
-- [→ Plugin Marketplace](https://pullwise.ai/plugins)
 
-### ⚡ Auto-Fix
+### CLI
 
-- One-click apply for AI suggestions
-- Safe preview before applying
-- Rollback support
-- Batch operations
+```bash
+npm install -g @pullwise/cli
 
----
+pw auth login                    # Authenticate
+pw projects list                 # List projects
+pw reviews trigger 42            # Trigger review for PR #42
+pw reviews watch 123             # Watch review in real-time
+pw review --staged               # Review staged changes locally
+pw hooks install                 # Install git hooks
+```
 
-## 🌍 Community
+### IDE Extensions
 
-Join **10,000+ developers** using Pullwise:
-
-- **5,000+** GitHub Stars
-- **10,000+** Docker Pulls
-- **200+** Community Plugins
-- **1,000+** Discord Members
-
-[→ Join Discord](https://discord.gg/pullwise)
+- **VS Code**: Inline diagnostics, trigger reviews, view issues, status bar integration
+- **IntelliJ IDEA**: External annotator, review actions, settings panel, status bar widget
 
 ---
 
-## 📖 Documentation
+## Editions
 
-- [Getting Started Guide](https://docs.pullwise.ai/getting-started)
-- [Installation Guide](https://docs.pullwise.ai/installation)
-- [Configuration](https://docs.pullwise.ai/configuration)
-- [Plugin Development](https://docs.pullwise.ai/plugins)
-- [API Reference](https://docs.pullwise.ai/api)
+Pullwise follows an **open-core model**:
+
+| Feature | Community Edition | Professional | Enterprise |
+|---------|------------------|-------------|------------|
+| **Price** | **FREE** | $49/dev/mo | $99/dev/mo |
+| **License** | MIT | Proprietary | Proprietary |
+| **Users** | 5 | 50 | Unlimited |
+| **Organizations** | 1 | 3 | Unlimited |
+| **Review Pipeline** | 2-pass | 4-pass | 4-pass |
+| **Code Graph** | -- | Yes | Yes |
+| **SSO/SAML** | -- | Yes | Yes |
+| **Audit Logs** | -- | 30 days | 1 year |
+| **SLA** | Community | 48h | 4h |
 
 ---
 
-## 🚢 Deployment
+## Development
 
-### Docker (Recommended)
+### Backend (Java 17 + Spring Boot 3.2 + Maven)
+
+```bash
+cd backend
+./mvnw spring-boot:run -Dspring-boot.run.profiles=dev    # Dev server (port 8080)
+mvn test -B                                                # Run all tests
+mvn test -Dtest=ClassName#methodName                       # Run single test
+```
+
+### Frontend (React 18 + TypeScript + Vite)
+
+```bash
+cd frontend
+npm ci --legacy-peer-deps    # Install deps
+npm run dev                  # Dev server (port 3000, proxies /api to 8080)
+npm run build                # Production build
+npm run lint                 # ESLint check
+```
+
+### CLI
+
+```bash
+cd cli
+npm ci                       # Install deps
+npm run dev                  # Dev mode with watch
+npm run build                # Build for distribution
+```
+
+---
+
+## Deployment
+
+### Docker Compose (recommended)
 
 ```bash
 docker-compose up -d
 ```
 
-### Kubernetes
+Environment variables for production:
 
-```bash
-kubectl apply -f k8s/community-edition/
-```
-
-### Helm Chart
-
-```bash
-helm repo add pullwise https://charts.pullwise.ai
-helm install pullwise pullwise/pullwise-ce
-```
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DB_HOST` | PostgreSQL host | `localhost` |
+| `DB_PASSWORD` | Database password | `pullwise` |
+| `JWT_SECRET` | JWT signing key (min 32 chars) | -- |
+| `REDIS_HOST` | Redis host | `localhost` |
+| `OPENROUTER_API_KEY` | OpenRouter API key for cloud LLMs | -- |
+| `PULLWISE_ENCRYPTION_KEY` | AES-256 key for sensitive configs | -- |
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md).
+We welcome contributions! Key areas:
 
-**Areas where we need help:**
-- Language integrations (Rust, Go, Python, PHP)
-- Plugin development
+- Language integrations and plugins
+- Platform integrations
 - Documentation improvements
 - Bug reports and testing
-- [→ Good First Issues](https://github.com/integralltech/pullwise-ai/issues?q=label%3A%22good+first+issue%22+is%3Aopen+is%3Aissue)
+
+See [Good First Issues](https://github.com/integralltech/pullwise-ai/issues?q=label%3A%22good+first+issue%22+is%3Aopen+is%3Aissue) to get started.
 
 ---
 
-## 📜 License
+## License
 
-**Community Edition** - [MIT License](LICENSE)
+**Community Edition** — [MIT License](LICENSE)
 
 Free to use, modify, and distribute. Forever.
 
 ---
 
-## 🙏 Acknowledgments
-
-Built with inspiration from:
-- **GitLab** - Open-core business model
-- **SonarQube** - SAST foundation
-- **CodeRabbit** - AI review patterns
-- **Open Source Community** - Tools and libraries
-
----
-
 <div align="center">
 
-  **[⬆ Back to Top](#pullwise---the-open-code-review-platform)**
+  **[Back to Top](#pullwise---the-open-code-review-platform)**
 
-  Made with ❤️ by the Pullwise community
+  Made with care by the Pullwise community
 
   **pullwise.ai** • [@pullwise](https://twitter.com/pullwise) • [hello@pullwise.ai](mailto:hello@pullwise.ai)
 

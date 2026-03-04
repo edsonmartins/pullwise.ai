@@ -20,13 +20,31 @@ public class DemoRequestController {
 
     @PostMapping
     public ResponseEntity<Map<String, String>> createDemoRequest(@RequestBody Map<String, String> request) {
-        log.info("Demo request received from: {} <{}> at {}",
-                request.get("name"),
-                request.get("email"),
-                request.get("company"));
+        String name = request.get("name");
+        String email = request.get("email");
+        String company = request.get("company");
+        String message = request.get("message");
 
-        // TODO: Persist to database or send notification email when needed
+        // Validate required fields
+        if (name == null || name.isBlank()) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Name is required"));
+        }
+        if (email == null || email.isBlank()) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Email is required"));
+        }
+
+        log.info("Demo request received from: {} <{}> at company: {}. Message: {}",
+                name, email, company, message);
+
+        // Note: When a DemoRequest entity is introduced, persist here.
+        // For now the request is logged for manual follow-up.
+
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(Map.of("status", "received"));
+                .body(Map.of(
+                        "status", "received",
+                        "message", "Thank you for your interest! We will contact you soon."
+                ));
     }
 }

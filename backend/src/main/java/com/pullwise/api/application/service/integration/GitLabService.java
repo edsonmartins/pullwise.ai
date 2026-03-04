@@ -3,6 +3,7 @@ package com.pullwise.api.application.service.integration;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pullwise.api.application.service.config.ConfigurationResolver;
+import com.pullwise.api.domain.constants.ConfigKeys;
 import com.pullwise.api.domain.enums.Platform;
 import com.pullwise.api.domain.model.Project;
 import com.pullwise.api.domain.model.PullRequest;
@@ -37,7 +38,7 @@ public class GitLabService {
     @Value("${integrations.gitlab.token:}")
     private String gitlabToken;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
     private final ProjectRepository projectRepository;
     private final PullRequestRepository pullRequestRepository;
@@ -172,6 +173,53 @@ public class GitLabService {
         });
     }
 
+    /**
+     * Posta comentários inline em um Merge Request via Discussions API.
+     * POST /projects/:id/merge_requests/:merge_request_iid/discussions
+     */
+    public void postInlineComments(Project project, int mrIid,
+                                    List<GitHubService.InlineComment> comments) {
+        String projectId = extractGitLabProjectId(project);
+
+        for (GitHubService.InlineComment comment : comments) {
+            String url = String.format("%s/projects/%s/merge_requests/%d/discussions",
+                    gitlabApiUrl, projectId, mrIid);
+
+            try {
+                HttpHeaders headers = createHeaders(project);
+                headers.setContentType(MediaType.APPLICATION_JSON);
+
+                // GitLab inline comment via Discussions API requires position object
+                var position = java.util.Map.of(
+                        "base_sha", "",
+                        "start_sha", "",
+                        "head_sha", "",
+                        "position_type", "text",
+                        "new_path", comment.path(),
+                        "new_line", comment.line()
+                );
+
+                var body = java.util.Map.of(
+                        "body", comment.body(),
+                        "position", position
+                );
+
+                String jsonBody = objectMapper.writeValueAsString(body);
+                HttpEntity<String> entity = new HttpEntity<>(jsonBody, headers);
+
+                ResponseEntity<String> response = restTemplate.exchange(
+                        url, HttpMethod.POST, entity, String.class);
+
+                if (response.getStatusCode().is2xxSuccessful()) {
+                    log.debug("Posted inline comment on MR !{} at {}:{}", mrIid, comment.path(), comment.line());
+                }
+            } catch (Exception e) {
+                log.warn("Failed to post inline comment on MR !{} at {}:{}: {}",
+                        mrIid, comment.path(), comment.line(), e.getMessage());
+            }
+        }
+    }
+
     // ========== Private Helpers ==========
 
     private List<GitHubService.FileDiff> parseMergeRequestChanges(String json) {
@@ -218,7 +266,9 @@ public class GitLabService {
             try {
                 Long.parseLong(project.getRepositoryId());
                 return project.getRepositoryId();
-            } catch (NumberFormatException ignored) {}
+            } catch (NumberFormatException e) {
+                log.debug("Repository ID is not numeric, falling back to URL extraction");
+            }
         }
 
         // Extrair namespace/project do URL e URL-encode
@@ -242,7 +292,7 @@ public class GitLabService {
         String token = gitlabToken;
         if (project.getOrganization() != null) {
             String orgToken = configurationResolver.getConfig(
-                    project.getId(), "gitlab.token");
+                    project.getId(), ConfigKeys.GITLAB_TOKEN);
             if (orgToken != null && !orgToken.isBlank()) {
                 token = orgToken;
             }

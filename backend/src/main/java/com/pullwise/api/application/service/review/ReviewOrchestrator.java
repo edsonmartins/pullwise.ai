@@ -1,12 +1,17 @@
 package com.pullwise.api.application.service.review;
 
+import com.pullwise.api.application.service.attestation.AttestationService;
 import com.pullwise.api.application.service.billing.RateLimitingService;
+import com.pullwise.api.application.service.config.ConfigurationResolver;
+import com.pullwise.api.domain.constants.ConfigKeys;
+import com.pullwise.api.application.service.integration.AzureDevOpsService;
 import com.pullwise.api.application.service.integration.BitBucketService;
 import com.pullwise.api.application.service.integration.GitHubService;
 import com.pullwise.api.application.service.integration.GitLabService;
 import com.pullwise.api.application.service.notification.NotificationService;
 import com.pullwise.api.domain.enums.Platform;
 import com.pullwise.api.domain.enums.ReviewStatus;
+import com.pullwise.api.domain.enums.Severity;
 import com.pullwise.api.domain.model.*;
 import com.pullwise.api.domain.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -37,9 +42,14 @@ public class ReviewOrchestrator {
     private final GitHubService gitHubService;
     private final BitBucketService bitBucketService;
     private final GitLabService gitLabService;
+    private final AzureDevOpsService azureDevOpsService;
     private final UsageRecordRepository usageRecordRepository;
     private final RateLimitingService rateLimitingService;
     private final NotificationService notificationService;
+    private final ConfigurationResolver configurationResolver;
+    private final RiskAssessmentService riskAssessmentService;
+    private final CoverageTrackingService coverageTrackingService;
+    private final AttestationService attestationService;
 
     /**
      * Inicia um review de forma assíncrona.
@@ -63,6 +73,8 @@ public class ReviewOrchestrator {
                 diffs = bitBucketService.fetchPullRequestDiffs(pr.getProject(), pr.getPrNumber());
             } else if (pr.getPlatform() == Platform.GITLAB) {
                 diffs = gitLabService.fetchMergeRequestDiffs(pr.getProject(), pr.getPrNumber());
+            } else if (pr.getPlatform() == Platform.AZURE_DEVOPS) {
+                diffs = azureDevOpsService.fetchPullRequestDiffs(pr.getProject(), pr.getPrNumber());
             } else {
                 diffs = gitHubService.fetchPullRequestDiffs(pr.getProject(), pr.getPrNumber());
             }
@@ -82,30 +94,67 @@ public class ReviewOrchestrator {
             // 4. Consolidar resultados
             List<Issue> allIssues = consolidationService.consolidateIssues(sastIssues, llmIssues);
 
+            // 4b. Aplicar severity gating (filtrar issues abaixo da severidade mínima)
+            Long projectId = pr.getProject().getId();
+            String minSeverityConfig = configurationResolver.getConfig(projectId, ConfigKeys.REVIEW_MIN_SEVERITY);
+            if (minSeverityConfig != null && !minSeverityConfig.isBlank()) {
+                try {
+                    Severity minSeverity = Severity.valueOf(minSeverityConfig.toUpperCase());
+                    int beforeFilter = allIssues.size();
+                    allIssues = consolidationService.filterByMinSeverity(allIssues, minSeverity);
+                    log.info("Severity gating: filtered {} issues to {} (min={})",
+                            beforeFilter, allIssues.size(), minSeverity);
+                } catch (IllegalArgumentException e) {
+                    log.warn("Invalid min_severity config '{}', skipping filter", minSeverityConfig);
+                }
+            }
+
             // 5. Salvar issues
             for (Issue issue : allIssues) {
                 issue.setReview(review);
                 issueRepository.save(issue);
             }
 
+            // 5b. Atualizar cobertura de review
+            coverageTrackingService.updateCoverage(review, diffs, allIssues);
+
             // 6. Atualizar métricas do review
             review.setFilesAnalyzed(diffs.size());
             review.setLinesAddedAnalyzed(diffs.stream().mapToInt(d -> d.additions()).sum());
             review.setLinesRemovedAnalyzed(diffs.stream().mapToInt(d -> d.deletions()).sum());
 
-            // 7. Postar comentário no PR
+            // 7. Postar comentário resumo no PR
             String commentId = postingService.postReviewComment(pr, allIssues);
             review.setReviewCommentId(commentId);
+
+            // 7b. Postar comentários inline (CRITICAL/HIGH em linhas específicas)
+            postingService.postInlineComments(pr, allIssues);
 
             // 8. Marcar como completado
             review.complete();
             reviewRepository.save(review);
+
+            // 8b. Gerar attestation criptográfica
+            attestationService.createAttestation(review, allIssues);
 
             // 9. Registrar uso
             recordUsage(review);
 
             // 10. Enviar notificações (Slack, Teams — assíncrono)
             notificationService.notifyReviewCompleted(review, allIssues);
+
+            // 11. Auto-approve se PR é de baixo risco (opt-in)
+            var riskAssessment = riskAssessmentService.assess(pr, diffs, allIssues);
+            log.info("PR #{} {}", pr.getPrNumber(), riskAssessment.getSummary());
+            if (riskAssessmentService.shouldAutoApprove(pr, riskAssessment)) {
+                String approveBody = String.format(
+                        "Auto-approved by Pullwise. %s", riskAssessment.getSummary());
+                if (pr.getPlatform() == Platform.GITHUB) {
+                    gitHubService.approvePullRequest(pr.getProject(), pr.getPrNumber(), approveBody);
+                } else if (pr.getPlatform() == Platform.AZURE_DEVOPS) {
+                    azureDevOpsService.approvePullRequest(pr.getProject(), pr.getPrNumber());
+                }
+            }
 
             log.info("Review {} completed with {} issues", reviewId, allIssues.size());
 

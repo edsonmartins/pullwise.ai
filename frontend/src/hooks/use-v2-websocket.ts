@@ -85,7 +85,6 @@ export function useV2WebSocket(autoConnect = true) {
     })
 
     socket.on('connect', () => {
-      console.log('[WebSocket] Connected:', socket.id)
       setIsConnected(true)
       reconnectAttempts.current = 0
 
@@ -96,32 +95,28 @@ export function useV2WebSocket(autoConnect = true) {
       }
     })
 
-    socket.on('disconnect', (reason: string) => {
-      console.log('[WebSocket] Disconnected:', reason)
+    socket.on('disconnect', () => {
       setIsConnected(false)
     })
 
-    socket.on('error', (error: Error) => {
-      console.error('[WebSocket] Error:', error)
+    socket.on('error', () => {
+      // Error handling is done via disconnect
     })
 
-    socket.on('reconnect', (attemptNumber: number) => {
-      console.log('[WebSocket] Reconnected after', attemptNumber, 'attempts')
+    socket.on('reconnect', () => {
       reconnectAttempts.current = 0
     })
 
     socket.on('reconnect_attempt', (attemptNumber: number) => {
       reconnectAttempts.current = attemptNumber
-      console.log('[WebSocket] Reconnect attempt:', attemptNumber)
     })
 
     socket.on('reconnect_failed', () => {
-      console.error('[WebSocket] Reconnection failed after', MAX_RECONNECT_ATTEMPTS, 'attempts')
+      // Reconnection exhausted
     })
 
     // Review progress updates
     socket.on('review:progress', (data: ReviewProgressMessage) => {
-      console.log('[WebSocket] Review progress:', data)
       setReviewProgress(data.reviewId, data.progress)
 
       // Trigger analytics refresh if needed
@@ -132,7 +127,6 @@ export function useV2WebSocket(autoConnect = true) {
 
     // Review completed
     socket.on('review:completed', (data: ReviewCompletedMessage) => {
-      console.log('[WebSocket] Review completed:', data)
       setReviewProgress(data.reviewId, 100)
 
       // Refresh analytics
@@ -141,27 +135,23 @@ export function useV2WebSocket(autoConnect = true) {
 
     // Review failed
     socket.on('review:failed', (data: ReviewFailedMessage) => {
-      console.error('[WebSocket] Review failed:', data)
       // Show error notification
       showErrorNotification(`Review #${data.reviewId} failed: ${data.error}`)
     })
 
     // Issue detected (real-time)
     socket.on('issue:detected', (data: IssueDetectedMessage) => {
-      console.log('[WebSocket] Issue detected:', data)
       // Could show a toast notification
       showIssueNotification(data.issue)
     })
 
     // Fix generated
     socket.on('fix:generated', (data: FixGeneratedMessage) => {
-      console.log('[WebSocket] Fix generated:', data)
       showSuccessNotification(`Auto-fix generated for issue #${data.issueId}`)
     })
 
     // Plugin status changed
     socket.on('plugin:status', (data: PluginStatusMessage) => {
-      console.log('[WebSocket] Plugin status:', data)
       // Refresh plugins list
       if (data.status === 'installed' || data.status === 'uninstalled') {
         // Invalidate plugins query
@@ -169,14 +159,12 @@ export function useV2WebSocket(autoConnect = true) {
     })
 
     // Code graph updated
-    socket.on('codegraph:updated', (data: { projectId: number; timestamp: number }) => {
-      console.log('[WebSocket] Code graph updated:', data)
+    socket.on('codegraph:updated', (_data: { projectId: number; timestamp: number }) => {
       // Could trigger auto-refresh of code graph
     })
 
     // Organization-wide broadcasts
     socket.on('org:announcement', (data: { message: string; type: string }) => {
-      console.log('[WebSocket] Org announcement:', data)
       showAnnouncement(data.message, data.type)
     })
 

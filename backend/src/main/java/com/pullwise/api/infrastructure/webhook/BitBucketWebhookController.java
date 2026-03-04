@@ -3,16 +3,28 @@ package com.pullwise.api.infrastructure.webhook;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pullwise.api.application.dto.BitBucketWebhookPayload;
 import com.pullwise.api.application.service.config.ConfigurationResolver;
+import com.pullwise.api.domain.constants.ConfigKeys;
 import com.pullwise.api.application.service.integration.BitBucketService;
+import com.pullwise.api.application.service.integration.SlashCommandService;
 import com.pullwise.api.application.service.review.ReviewOrchestrator;
+import com.pullwise.api.domain.enums.Platform;
 import com.pullwise.api.domain.model.Project;
 import com.pullwise.api.domain.model.PullRequest;
 import com.pullwise.api.domain.repository.ProjectRepository;
+import com.pullwise.api.domain.repository.PullRequestRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 
 /**
  * Controller para receber webhooks do BitBucket.
@@ -25,9 +37,14 @@ public class BitBucketWebhookController {
 
     private final BitBucketService bitBucketService;
     private final ProjectRepository projectRepository;
+    private final PullRequestRepository pullRequestRepository;
     private final ReviewOrchestrator reviewOrchestrator;
     private final ConfigurationResolver configurationResolver;
+    private final SlashCommandService slashCommandService;
     private final ObjectMapper objectMapper;
+
+    @Value("${integrations.bitbucket.webhook-secret:}")
+    private String webhookSecret;
 
     /**
      * Endpoint para receber webhooks do BitBucket.
@@ -42,10 +59,13 @@ public class BitBucketWebhookController {
         log.info("Received BitBucket webhook event: {}", eventType);
 
         try {
-            // Validar assinatura do webhook (em produção)
-            // if (!validateSignature(payload, signature)) {
-            //     return ResponseEntity.status(401).build();
-            // }
+            // Validate webhook signature if secret is configured
+            if (webhookSecret != null && !webhookSecret.isBlank()) {
+                if (!validateSignature(payload, signature)) {
+                    log.warn("Invalid BitBucket webhook signature from {}", request.getRemoteAddr());
+                    return ResponseEntity.status(401).build();
+                }
+            }
 
             BitBucketWebhookPayload webhookPayload =
                     objectMapper.readValue(payload, BitBucketWebhookPayload.class);
@@ -62,6 +82,10 @@ public class BitBucketWebhookController {
                      "pullrequest:unapproved",
                      "pullrequest:changes_request_created" -> {
                     handlePullRequestReviewEvent(eventType, webhookPayload);
+                }
+
+                case "pullrequest:comment_created" -> {
+                    handleCommentEvent(webhookPayload);
                 }
 
                 case "repo:push" -> {
@@ -146,6 +170,34 @@ public class BitBucketWebhookController {
     }
 
     /**
+     * Processa eventos de comentário em PRs (slash commands).
+     */
+    private void handleCommentEvent(BitBucketWebhookPayload payload) {
+        BitBucketWebhookPayload.Comment comment = payload.getComment();
+        BitBucketWebhookPayload.PullRequest prData = payload.getPullRequest();
+
+        if (comment == null || prData == null) return;
+
+        String body = comment.getContent() != null ? comment.getContent().getRaw() : null;
+        if (body == null || !slashCommandService.containsCommand(body)) return;
+
+        log.info("Slash command detected in BitBucket PR #{} comment", prData.getNumber());
+
+        // Encontrar projeto e PR no banco
+        String repoFullName = payload.getRepository() != null ? payload.getRepository().getFullName() : null;
+        if (repoFullName == null) return;
+
+        PullRequest pr = bitBucketService.syncPullRequest(payload);
+        if (pr == null) {
+            log.warn("Could not find/sync BitBucket PR #{}", prData.getNumber());
+            return;
+        }
+
+        String username = comment.getUser() != null ? comment.getUser().getNickname() : "unknown";
+        slashCommandService.executeCommand(pr.getId(), body, username);
+    }
+
+    /**
      * Processa eventos de push.
      */
     private void handlePushEvent(BitBucketWebhookPayload payload) {
@@ -161,7 +213,7 @@ public class BitBucketWebhookController {
             return true;
         }
         return Boolean.parseBoolean(
-                configurationResolver.getConfig(project.getId(), "review.auto_post")
+                configurationResolver.getConfig(project.getId(), ConfigKeys.REVIEW_AUTO_POST)
         );
     }
 
@@ -186,6 +238,28 @@ public class BitBucketWebhookController {
 
         } catch (Exception e) {
             log.error("Failed to start review for PR #{}", pr.getPrNumber(), e);
+        }
+    }
+
+    /**
+     * Validates the HMAC-SHA256 signature of a BitBucket webhook payload.
+     */
+    private boolean validateSignature(String payload, String signature) {
+        if (signature == null || signature.isBlank()) {
+            return false;
+        }
+
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            SecretKeySpec secretKeySpec = new SecretKeySpec(
+                    webhookSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+            mac.init(secretKeySpec);
+            byte[] hash = mac.doFinal(payload.getBytes(StandardCharsets.UTF_8));
+            String expected = HexFormat.of().formatHex(hash);
+            return expected.equals(signature);
+        } catch (NoSuchAlgorithmException | InvalidKeyException e) {
+            log.error("Failed to validate BitBucket webhook signature", e);
+            return false;
         }
     }
 }

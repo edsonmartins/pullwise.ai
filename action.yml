@@ -1,0 +1,165 @@
+name: 'Pullwise Code Review'
+description: 'AI-powered code review combining SAST analysis with LLMs'
+author: 'Pullwise'
+
+branding:
+  icon: 'eye'
+  color: 'purple'
+
+inputs:
+  api-url:
+    description: 'Pullwise API URL (for self-hosted instances)'
+    required: false
+    default: 'https://api.pullwise.ai'
+  api-key:
+    description: 'Pullwise API key for authentication'
+    required: true
+  sast-enabled:
+    description: 'Enable SAST analysis'
+    required: false
+    default: 'true'
+  llm-enabled:
+    description: 'Enable LLM analysis'
+    required: false
+    default: 'true'
+  rag-enabled:
+    description: 'Enable RAG context enrichment'
+    required: false
+    default: 'false'
+  min-severity:
+    description: 'Minimum severity to report (CRITICAL, HIGH, MEDIUM, LOW)'
+    required: false
+    default: 'LOW'
+  inline-comments:
+    description: 'Post inline comments on specific lines'
+    required: false
+    default: 'true'
+  fail-on-critical:
+    description: 'Fail the check if critical issues are found'
+    required: false
+    default: 'false'
+
+outputs:
+  review-id:
+    description: 'The ID of the created review'
+  issues-count:
+    description: 'Total number of issues found'
+  critical-count:
+    description: 'Number of critical issues found'
+  high-count:
+    description: 'Number of high severity issues found'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Get PR info
+      id: pr-info
+      shell: bash
+      run: |
+        echo "pr_number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+        echo "repo=${{ github.repository }}" >> $GITHUB_OUTPUT
+        echo "base_sha=${{ github.event.pull_request.base.sha }}" >> $GITHUB_OUTPUT
+        echo "head_sha=${{ github.event.pull_request.head.sha }}" >> $GITHUB_OUTPUT
+
+    - name: Trigger Pullwise Review
+      id: review
+      shell: bash
+      env:
+        PULLWISE_API_URL: ${{ inputs.api-url }}
+        PULLWISE_API_KEY: ${{ inputs.api-key }}
+        SAST_ENABLED: ${{ inputs.sast-enabled }}
+        LLM_ENABLED: ${{ inputs.llm-enabled }}
+        RAG_ENABLED: ${{ inputs.rag-enabled }}
+        MIN_SEVERITY: ${{ inputs.min-severity }}
+        INLINE_COMMENTS: ${{ inputs.inline-comments }}
+      run: |
+        # Trigger review via Pullwise API
+        RESPONSE=$(curl -s -w "\n%{http_code}" \
+          -X POST "${PULLWISE_API_URL}/api/v1/reviews/trigger" \
+          -H "Authorization: Bearer ${PULLWISE_API_KEY}" \
+          -H "Content-Type: application/json" \
+          -d "{
+            \"repository\": \"${{ steps.pr-info.outputs.repo }}\",
+            \"prNumber\": ${{ steps.pr-info.outputs.pr_number }},
+            \"baseSha\": \"${{ steps.pr-info.outputs.base_sha }}\",
+            \"headSha\": \"${{ steps.pr-info.outputs.head_sha }}\",
+            \"platform\": \"GITHUB\",
+            \"options\": {
+              \"sastEnabled\": ${SAST_ENABLED},
+              \"llmEnabled\": ${LLM_ENABLED},
+              \"ragEnabled\": ${RAG_ENABLED},
+              \"minSeverity\": \"${MIN_SEVERITY}\",
+              \"inlineComments\": ${INLINE_COMMENTS}
+            }
+          }")
+
+        HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+        BODY=$(echo "$RESPONSE" | head -n -1)
+
+        if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+          REVIEW_ID=$(echo "$BODY" | jq -r '.reviewId // empty')
+          echo "review_id=${REVIEW_ID}" >> $GITHUB_OUTPUT
+          echo "Review triggered successfully (ID: ${REVIEW_ID})"
+        else
+          echo "::error::Failed to trigger review (HTTP ${HTTP_CODE}): ${BODY}"
+          exit 1
+        fi
+
+    - name: Wait for review completion
+      id: wait
+      shell: bash
+      env:
+        PULLWISE_API_URL: ${{ inputs.api-url }}
+        PULLWISE_API_KEY: ${{ inputs.api-key }}
+      run: |
+        REVIEW_ID="${{ steps.review.outputs.review_id }}"
+        if [ -z "$REVIEW_ID" ]; then
+          echo "::warning::No review ID returned, skipping wait"
+          exit 0
+        fi
+
+        MAX_WAIT=300  # 5 minutes
+        ELAPSED=0
+        INTERVAL=10
+
+        while [ $ELAPSED -lt $MAX_WAIT ]; do
+          STATUS_RESPONSE=$(curl -s \
+            "${PULLWISE_API_URL}/api/v1/reviews/${REVIEW_ID}" \
+            -H "Authorization: Bearer ${PULLWISE_API_KEY}")
+
+          STATUS=$(echo "$STATUS_RESPONSE" | jq -r '.status // empty')
+
+          if [ "$STATUS" = "COMPLETED" ]; then
+            ISSUES=$(echo "$STATUS_RESPONSE" | jq -r '.issuesCount // 0')
+            CRITICAL=$(echo "$STATUS_RESPONSE" | jq -r '.criticalCount // 0')
+            HIGH=$(echo "$STATUS_RESPONSE" | jq -r '.highCount // 0')
+
+            echo "issues_count=${ISSUES}" >> $GITHUB_OUTPUT
+            echo "critical_count=${CRITICAL}" >> $GITHUB_OUTPUT
+            echo "high_count=${HIGH}" >> $GITHUB_OUTPUT
+
+            echo "Review completed: ${ISSUES} issues (${CRITICAL} critical, ${HIGH} high)"
+            break
+          elif [ "$STATUS" = "FAILED" ]; then
+            echo "::error::Review failed"
+            exit 1
+          fi
+
+          echo "Review in progress... (${ELAPSED}s elapsed)"
+          sleep $INTERVAL
+          ELAPSED=$((ELAPSED + INTERVAL))
+        done
+
+        if [ $ELAPSED -ge $MAX_WAIT ]; then
+          echo "::warning::Review timed out after ${MAX_WAIT}s"
+        fi
+
+    - name: Check for critical issues
+      if: inputs.fail-on-critical == 'true'
+      shell: bash
+      run: |
+        CRITICAL="${{ steps.wait.outputs.critical_count }}"
+        if [ -n "$CRITICAL" ] && [ "$CRITICAL" -gt 0 ]; then
+          echo "::error::Found ${CRITICAL} critical issue(s). Failing check."
+          exit 1
+        fi

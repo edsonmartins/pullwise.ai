@@ -3,17 +3,17 @@ package com.pullwise.api.infrastructure.rest;
 import com.pullwise.api.application.dto.request.CreateProjectRequest;
 import com.pullwise.api.application.dto.request.UpdateProjectRequest;
 import com.pullwise.api.application.dto.response.ProjectDTO;
-import com.pullwise.api.application.service.auth.AuthenticationService;
+import com.pullwise.api.application.service.auth.AuthorizationService;
 import com.pullwise.api.domain.model.Project;
-import com.pullwise.api.domain.model.User;
 import com.pullwise.api.domain.repository.ProjectRepository;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.core.OAuth2AuthenticatedPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
@@ -29,27 +29,37 @@ import java.util.List;
 public class ProjectController {
 
     private final ProjectRepository projectRepository;
-    private final AuthenticationService authenticationService;
+    private final AuthorizationService authorizationService;
 
     /**
-     * Lista todos os projetos do usuário.
+     * Lista projetos das organizações do usuário autenticado (paginado).
      */
     @GetMapping
-    public ResponseEntity<List<ProjectDTO>> listProjects(Principal principal) {
-        Long userId = getUserIdFromPrincipal(principal);
-        // Filtrar projetos que o usuário tem acesso
-        // Por simplicidade, retornando todos
-        List<ProjectDTO> projects = projectRepository.findAll().stream()
-                .map(ProjectDTO::from)
-                .toList();
+    public ResponseEntity<Page<ProjectDTO>> listProjects(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            Principal principal) {
+        Long userId = authorizationService.getUserId(principal);
+        List<Long> orgIds = authorizationService.getUserOrganizationIds(userId);
+
+        if (orgIds.isEmpty()) {
+            return ResponseEntity.ok(Page.empty());
+        }
+
+        Page<ProjectDTO> projects = projectRepository
+                .findActiveByOrganizationIds(orgIds, PageRequest.of(page, size, Sort.by("name")))
+                .map(ProjectDTO::from);
         return ResponseEntity.ok(projects);
     }
 
     /**
-     * Busca um projeto por ID.
+     * Busca um projeto por ID (verifica acesso via organização).
      */
     @GetMapping("/{id}")
     public ResponseEntity<ProjectDTO> getProject(@PathVariable Long id, Principal principal) {
+        Long userId = authorizationService.getUserId(principal);
+        authorizationService.requireProjectAccess(userId, id);
+
         return projectRepository.findById(id)
                 .map(ProjectDTO::from)
                 .map(ResponseEntity::ok)
@@ -63,10 +73,7 @@ public class ProjectController {
     public ResponseEntity<ProjectDTO> createProject(
             @Valid @RequestBody CreateProjectRequest request,
             Principal principal) {
-        Long userId = getUserIdFromPrincipal(principal);
-
-        // Buscar organização do usuário (simplificado)
-        // Em produção, usuário selecionaria a organização
+        Long userId = authorizationService.getUserId(principal);
 
         Project project = Project.builder()
                 .name(request.name())
@@ -84,13 +91,15 @@ public class ProjectController {
     }
 
     /**
-     * Atualiza um projeto.
+     * Atualiza um projeto (verifica acesso).
      */
     @PutMapping("/{id}")
     public ResponseEntity<ProjectDTO> updateProject(
             @PathVariable Long id,
             @Valid @RequestBody UpdateProjectRequest request,
             Principal principal) {
+        Long userId = authorizationService.getUserId(principal);
+        authorizationService.requireProjectAccess(userId, id);
 
         return projectRepository.findById(id)
                 .map(project -> {
@@ -113,45 +122,17 @@ public class ProjectController {
     }
 
     /**
-     * Remove um projeto.
+     * Remove um projeto (verifica acesso).
      */
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteProject(@PathVariable Long id, Principal principal) {
+        Long userId = authorizationService.getUserId(principal);
+        authorizationService.requireProjectAccess(userId, id);
+
         if (!projectRepository.existsById(id)) {
             return ResponseEntity.notFound().build();
         }
         projectRepository.deleteById(id);
         return ResponseEntity.noContent().build();
-    }
-
-    private Long getUserIdFromPrincipal(Principal principal) {
-        if (principal == null) {
-            throw new org.springframework.security.authentication.AuthenticationCredentialsNotFoundException(
-                    "No authentication principal found");
-        }
-
-        // JWT authentication: subject é o user ID como string
-        String name = principal.getName();
-        if (name != null) {
-            try {
-                return Long.parseLong(name);
-            } catch (NumberFormatException e) {
-                log.debug("Principal name is not a numeric user ID: {}", name);
-            }
-        }
-
-        // OAuth2 principal fallback
-        if (principal instanceof OAuth2AuthenticatedPrincipal oauth) {
-            Object userId = oauth.getAttribute("user_id");
-            if (userId instanceof Long l) {
-                return l;
-            }
-            if (userId instanceof String s) {
-                return Long.parseLong(s);
-            }
-        }
-
-        throw new org.springframework.security.authentication.AuthenticationCredentialsNotFoundException(
-                "Unable to extract user ID from authentication principal");
     }
 }

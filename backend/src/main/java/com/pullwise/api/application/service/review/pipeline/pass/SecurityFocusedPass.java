@@ -1,7 +1,9 @@
 package com.pullwise.api.application.service.review.pipeline.pass;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pullwise.api.application.service.config.ConfigurationResolver;
 import com.pullwise.api.application.service.integration.GitHubService;
+import com.pullwise.api.domain.constants.ConfigKeys;
 import com.pullwise.api.application.service.llm.router.MultiModelLLMRouter;
 import com.pullwise.api.domain.model.Issue;
 import com.pullwise.api.domain.model.PullRequest;
@@ -42,6 +44,7 @@ public class SecurityFocusedPass {
 
     private final MultiModelLLMRouter llmRouter;
     private final ObjectMapper objectMapper;
+    private final ConfigurationResolver configurationResolver;
 
     /**
      * Executa a análise focada em segurança.
@@ -124,8 +127,13 @@ public class SecurityFocusedPass {
         List<Issue> issues = new ArrayList<>();
 
         try {
+            // Resolver idioma do projeto
+            Long projectId = pullRequest.getProject() != null ? pullRequest.getProject().getId() : null;
+            String language = projectId != null
+                    ? configurationResolver.getConfig(projectId, ConfigKeys.REVIEW_LANGUAGE) : null;
+
             // Construir prompt focado em segurança
-            String systemPrompt = buildSecurityPrompt();
+            String systemPrompt = buildSecurityPrompt(language);
             String userPrompt = buildSecurityAnalysisPrompt(pullRequest, existingIssues, diffs);
 
             // Executar com modelo especializado em segurança
@@ -148,12 +156,20 @@ public class SecurityFocusedPass {
     /**
      * Constrói prompt especializado em segurança.
      */
-    private String buildSecurityPrompt() {
-        return """
+    private String buildSecurityPrompt(String language) {
+        String langInstruction = resolveLanguageInstruction(language);
+        return langInstruction + """
             You are a cybersecurity expert specializing in code security review.
-            Analyze the provided code for security vulnerabilities following OWASP Top 10.
+            Think step by step when analyzing code for security vulnerabilities.
 
-            Focus on:
+            For each potential vulnerability:
+            1. Identify the attack surface — what user input or external data reaches this code?
+            2. Trace the data flow — how does untrusted data propagate through the code?
+            3. Assess exploitability — can an attacker actually exploit this in practice?
+            4. Determine impact — what happens if exploited? Data leak, RCE, privilege escalation?
+            5. Provide a concrete fix — not just "sanitize input" but specific code changes
+
+            Focus on OWASP Top 10:
             1. **Injection**: SQL, NoSQL, OS command, LDAP injection
             2. **Broken Authentication**: Session management, password handling
             3. **XSS**: Cross-site scripting vulnerabilities
@@ -172,14 +188,20 @@ public class SecurityFocusedPass {
                 {
                   "title": "SQL Injection vulnerability",
                   "description": "Detailed explanation of the vulnerability and exploit scenario",
+                  "reasoning": "Step-by-step analysis: data flow, attack vector, exploitability assessment",
                   "severity": "CRITICAL|HIGH|MEDIUM|LOW",
                   "owasp": "A03:2021-Injection",
                   "line": 123,
-                  "recommendation": "How to fix"
+                  "recommendation": "Specific code fix with example"
                 }
               ]
             }
             ```
+
+            Important:
+            - Only report vulnerabilities you can demonstrate with a concrete attack scenario
+            - CRITICAL severity requires clear evidence of exploitability
+            - Include the reasoning chain to help developers understand the risk
             """;
     }
 
@@ -280,6 +302,9 @@ public class SecurityFocusedPass {
         if (issue.description() != null) {
             sb.append(issue.description());
         }
+        if (issue.reasoning() != null && !issue.reasoning().isBlank()) {
+            sb.append("\n\n**Analysis:** ").append(issue.reasoning());
+        }
         if (issue.owasp() != null) {
             sb.append("\n\n**OWASP**: ").append(issue.owasp());
         }
@@ -323,7 +348,7 @@ public class SecurityFocusedPass {
 
     // Records for JSON deserialization
     private record SecurityIssueResponse(List<SecurityIssue> issues) {}
-    private record SecurityIssue(String title, String description, String severity,
+    private record SecurityIssue(String title, String description, String reasoning, String severity,
                                  String owasp, Integer line, String recommendation, String file) {}
 
     /**
@@ -355,6 +380,20 @@ public class SecurityFocusedPass {
         if (owaspCategory.contains("XSS")) return "xss";
         if (owaspCategory.contains("Auth")) return "authentication";
         return "security";
+    }
+
+    /**
+     * Resolve instrução de idioma para o system prompt.
+     */
+    private String resolveLanguageInstruction(String language) {
+        if (language == null || language.isBlank() || "en".equalsIgnoreCase(language)) {
+            return "";
+        }
+        return switch (language.toLowerCase()) {
+            case "pt", "pt-br" -> "IMPORTANT: Write all your responses (titles, descriptions, recommendations) in Brazilian Portuguese.\n\n";
+            case "es" -> "IMPORTANT: Write all your responses (titles, descriptions, recommendations) in Spanish.\n\n";
+            default -> "IMPORTANT: Write all your responses in " + language + ".\n\n";
+        };
     }
 
     /**

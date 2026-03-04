@@ -20,7 +20,12 @@ public enum Platform {
     /**
      * GitLab - gitlab.com (futuro)
      */
-    GITLAB("gitlab", "GitLab", "gitlab.org");
+    GITLAB("gitlab", "GitLab", "gitlab.com"),
+
+    /**
+     * Azure DevOps - dev.azure.com
+     */
+    AZURE_DEVOPS("azure_devops", "Azure DevOps", "dev.azure.com");
 
     private final String code;
     private final String displayName;
@@ -42,6 +47,10 @@ public enum Platform {
     }
 
     public static Platform fromUrl(String url) {
+        // Azure DevOps also supports *.visualstudio.com (legacy)
+        if (url.contains("visualstudio.com")) {
+            return AZURE_DEVOPS;
+        }
         for (Platform platform : values()) {
             if (url.contains(platform.domain)) {
                 return platform;

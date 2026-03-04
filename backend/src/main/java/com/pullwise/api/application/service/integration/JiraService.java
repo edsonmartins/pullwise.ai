@@ -47,7 +47,7 @@ public class JiraService {
     @Value("${integrations.jira.default-issue-type:Bug}")
     private String defaultIssueType;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
 
     /**
      * Cria um ticket no Jira a partir de uma issue de código.

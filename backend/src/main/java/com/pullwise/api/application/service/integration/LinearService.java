@@ -43,7 +43,7 @@ public class LinearService {
     @Value("${integrations.linear.default-status:Backlog}")
     private String defaultStatus;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
 
     /**
      * Cria uma issue no Linear a partir de uma issue de código.

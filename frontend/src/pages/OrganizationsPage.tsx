@@ -189,7 +189,7 @@ export function OrganizationsPage() {
           if (editingOrg) {
             updateMutation.mutate({ id: editingOrg.id, data })
           } else {
-            createMutation.mutate(data as any)
+            createMutation.mutate(data)
           }
         }}
         organization={editingOrg}
@@ -292,7 +292,7 @@ function OrganizationCard({ organization, onEdit, onDelete, onBilling }: Organiz
 interface OrganizationFormModalProps {
   opened: boolean
   onClose: () => void
-  onSubmit: (data: any) => void
+  onSubmit: (data: { name: string; slug: string; planType: 'FREE' | 'PRO' | 'ENTERPRISE' }) => void
   organization: Organization | null
   loading?: boolean
 }
@@ -358,7 +358,7 @@ function OrganizationFormModal({
             { value: 'ENTERPRISE', label: `Enterprise - $${planLimits.ENTERPRISE.price}/mês` },
           ]}
           value={planType}
-          onChange={(value) => setPlanType((value || 'FREE') as any)}
+          onChange={(value) => setPlanType((value || 'FREE') as 'FREE' | 'PRO' | 'ENTERPRISE')}
         />
 
         {planType === 'FREE' && (

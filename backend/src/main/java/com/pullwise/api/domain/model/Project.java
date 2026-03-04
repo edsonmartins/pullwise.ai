@@ -101,6 +101,11 @@ public class Project {
             return repositoryUrl.replace("https://github.com/", "")
                     .replace(".git", "");
         }
+        if (platform == Platform.AZURE_DEVOPS && repositoryUrl != null && repositoryUrl.contains("_git/")) {
+            // Extract org/project/repo from https://dev.azure.com/org/project/_git/repo
+            String path = repositoryUrl.substring(repositoryUrl.indexOf("dev.azure.com/") + "dev.azure.com/".length());
+            return path.replace("/_git/", "/").replace(".git", "");
+        }
         return name;
     }
 }

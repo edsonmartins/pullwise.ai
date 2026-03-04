@@ -1,5 +1,6 @@
 package com.pullwise.api.application.service.review.pipeline;
 
+import com.pullwise.api.application.service.integration.AzureDevOpsService;
 import com.pullwise.api.application.service.integration.BitBucketService;
 import com.pullwise.api.application.service.integration.GitHubService;
 import com.pullwise.api.application.service.integration.GitLabService;
@@ -57,6 +58,7 @@ public class MultiPassReviewOrchestrator {
     private final GitHubService gitHubService;
     private final BitBucketService bitBucketService;
     private final GitLabService gitLabService;
+    private final AzureDevOpsService azureDevOpsService;
 
     /**
      * Executa o pipeline completo de múltiplas passadas.
@@ -84,6 +86,9 @@ public class MultiPassReviewOrchestrator {
                         pullRequest.getProject(), pullRequest.getPrNumber());
             } else if (pullRequest.getPlatform() == Platform.GITLAB) {
                 diffs = gitLabService.fetchMergeRequestDiffs(
+                        pullRequest.getProject(), pullRequest.getPrNumber());
+            } else if (pullRequest.getPlatform() == Platform.AZURE_DEVOPS) {
+                diffs = azureDevOpsService.fetchPullRequestDiffs(
                         pullRequest.getProject(), pullRequest.getPrNumber());
             } else {
                 diffs = gitHubService.fetchPullRequestDiffs(

@@ -4,12 +4,12 @@ import { IconCheck, IconAlertTriangle, IconInfoCircle } from '@tabler/icons-reac
 
 interface WebSocketMessage {
   type: 'REVIEW_STARTED' | 'REVIEW_COMPLETED' | 'REVIEW_FAILED' | 'ISSUE_FOUND' | 'PING'
-  data: any
+  data: Record<string, unknown>
 }
 
 interface WebSocketContextType {
   connected: boolean
-  sendMessage: (message: any) => void
+  sendMessage: (message: Record<string, unknown>) => void
 }
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined)
@@ -32,7 +32,6 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       const websocket = new WebSocket(`${WS_URL}?token=${token}`)
 
       websocket.onopen = () => {
-        console.log('WebSocket connected')
         setConnected(true)
         setReconnectAttempts(0)
       }
@@ -41,13 +40,12 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         try {
           const message: WebSocketMessage = JSON.parse(event.data)
           handleWebSocketMessage(message)
-        } catch (error) {
-          console.error('Error parsing WebSocket message:', error)
+        } catch {
+          // Ignore malformed messages
         }
       }
 
-      websocket.onclose = (event) => {
-        console.log('WebSocket disconnected:', event.code)
+      websocket.onclose = () => {
         setConnected(false)
         setWs(null)
 
@@ -60,13 +58,13 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      websocket.onerror = (error) => {
-        console.error('WebSocket error:', error)
+      websocket.onerror = () => {
+        // Error handling is done via onclose
       }
 
       setWs(websocket)
-    } catch (error) {
-      console.error('Failed to create WebSocket connection:', error)
+    } catch {
+      // Connection failed; will retry via reconnect logic
     }
   }, [ws, reconnectAttempts])
 
@@ -99,7 +97,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('storage', handleStorageChange)
   }, [connected, ws])
 
-  const sendMessage = useCallback((message: any) => {
+  const sendMessage = useCallback((message: Record<string, unknown>) => {
     if (ws?.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(message))
     }

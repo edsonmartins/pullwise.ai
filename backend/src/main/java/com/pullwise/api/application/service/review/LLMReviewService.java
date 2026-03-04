@@ -33,19 +33,45 @@ public class LLMReviewService {
     @Value("${integrations.openrouter.enabled:true}")
     private boolean openRouterEnabled;
 
+    @Value("${pullwise.review.max-files:50}")
+    private int maxFiles;
+
+    @Value("${pullwise.review.max-lines-per-file:1000}")
+    private int maxLinesPerFile;
+
+    @Value("${pullwise.review.chunk-size:10}")
+    private int chunkSize;
+
     /**
-     * Executa análise LLM nos arquivos do PR.
+     * Executa análise LLM nos arquivos do PR com chunking para PRs grandes.
+     * Arquivos são processados em batches configuráveis (default: 10 por chunk).
+     * Arquivos grandes têm seus diffs comprimidos para manter apenas hunks relevantes.
      */
     public List<Issue> analyze(PullRequest pr, List<GitHubService.FileDiff> diffs) {
         List<Issue> issues = new ArrayList<>();
 
-        // Limitar a 5 arquivos para não sobrecarregar a API
+        // Filtrar e preparar arquivos para análise
         List<GitHubService.FileDiff> filesToAnalyze = diffs.stream()
-                .limit(5)
+                .filter(this::shouldAnalyzeFile)
+                .limit(maxFiles)
                 .toList();
 
-        for (GitHubService.FileDiff diff : filesToAnalyze) {
-            if (shouldAnalyzeFile(diff)) {
+        log.info("LLM analysis: {} of {} files selected for review (max={})",
+                filesToAnalyze.size(), diffs.size(), maxFiles);
+
+        // Comprimir diffs de arquivos grandes
+        List<GitHubService.FileDiff> compressed = filesToAnalyze.stream()
+                .map(this::compressDiff)
+                .toList();
+
+        // Processar em chunks
+        for (int i = 0; i < compressed.size(); i += chunkSize) {
+            int end = Math.min(i + chunkSize, compressed.size());
+            List<GitHubService.FileDiff> chunk = compressed.subList(i, end);
+
+            log.debug("Processing chunk {}-{} of {} files", i + 1, end, compressed.size());
+
+            for (GitHubService.FileDiff diff : chunk) {
                 try {
                     List<Issue> fileIssues = analyzeFileWithLLM(pr, diff);
                     issues.addAll(fileIssues);
@@ -55,29 +81,94 @@ public class LLMReviewService {
             }
         }
 
-        log.info("LLM analysis found {} issues for PR {}", issues.size(), pr.getPrNumber());
+        log.info("LLM analysis found {} issues for PR {} ({} files analyzed)",
+                issues.size(), pr.getPrNumber(), compressed.size());
         return issues;
     }
 
     /**
      * Determina se um arquivo deve ser analisado pelo LLM.
+     * Não rejeita mais arquivos grandes — eles serão comprimidos.
      */
     private boolean shouldAnalyzeFile(GitHubService.FileDiff diff) {
         String filename = diff.filename().toLowerCase();
 
-        // Ignorar arquivos de configuração, lock files, etc.
+        // Ignorar arquivos de configuração, lock files, binários, etc.
         if (filename.endsWith(".lock") ||
                 filename.endsWith(".md") ||
                 filename.endsWith(".txt") ||
+                filename.endsWith(".csv") ||
+                filename.endsWith(".svg") ||
+                filename.endsWith(".png") ||
+                filename.endsWith(".jpg") ||
                 filename.contains("package-lock.json") ||
                 filename.contains("yarn.lock") ||
-                filename.contains("pom.xml") ||
-                filename.contains(".gradle")) {
+                filename.contains(".min.js") ||
+                filename.contains(".min.css")) {
             return false;
         }
 
-        // Apenas arquivos de código com mudanças significativas
-        return diff.additions() > 0 && diff.additions() < 500;
+        // Apenas arquivos com mudanças reais
+        return diff.additions() > 0 || diff.deletions() > 0;
+    }
+
+    /**
+     * Comprime o diff de arquivos grandes, mantendo apenas hunks relevantes.
+     * Para arquivos dentro do limite, retorna o diff inalterado.
+     */
+    private GitHubService.FileDiff compressDiff(GitHubService.FileDiff diff) {
+        if (diff.patch() == null) return diff;
+
+        int totalLines = diff.additions() + diff.deletions();
+        if (totalLines <= maxLinesPerFile) {
+            return diff;
+        }
+
+        // Extrair apenas hunks (seções com mudanças + contexto)
+        String[] lines = diff.patch().split("\n");
+        StringBuilder compressed = new StringBuilder();
+        int linesKept = 0;
+        boolean inHunk = false;
+        int contextLines = 0;
+
+        for (String line : lines) {
+            if (line.startsWith("@@")) {
+                // Hunk header — sempre manter
+                compressed.append(line).append("\n");
+                inHunk = true;
+                contextLines = 0;
+                linesKept++;
+            } else if (line.startsWith("+") || line.startsWith("-")) {
+                // Changed line — sempre manter
+                compressed.append(line).append("\n");
+                contextLines = 0;
+                linesKept++;
+            } else if (inHunk) {
+                // Context line — manter até 3 linhas de contexto
+                contextLines++;
+                if (contextLines <= 3) {
+                    compressed.append(line).append("\n");
+                    linesKept++;
+                } else if (contextLines == 4) {
+                    compressed.append("... (context omitted)\n");
+                    linesKept++;
+                }
+            }
+
+            if (linesKept >= maxLinesPerFile) {
+                compressed.append("\n... (diff truncated, ").append(totalLines - linesKept)
+                        .append(" more lines)\n");
+                break;
+            }
+        }
+
+        log.debug("Compressed diff for {}: {} lines -> {} lines",
+                diff.filename(), totalLines, linesKept);
+
+        return new GitHubService.FileDiff(
+                diff.filename(), diff.status(), diff.additions(), diff.deletions(),
+                compressed.toString()
+        );
     }
 
     /**

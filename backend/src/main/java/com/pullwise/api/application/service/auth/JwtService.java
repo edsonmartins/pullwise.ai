@@ -21,11 +21,22 @@ import java.util.function.Function;
 @Service
 public class JwtService {
 
+    private static final int MIN_SECRET_LENGTH = 32;
+
     @Value("${security.jwt.secret}")
     private String secret;
 
     @Value("${security.jwt.expiration:86400000}") // 24h default
     private Long expiration;
+
+    @jakarta.annotation.PostConstruct
+    void validateSecret() {
+        if (secret == null || secret.length() < MIN_SECRET_LENGTH) {
+            throw new IllegalStateException(
+                    "JWT secret must be at least " + MIN_SECRET_LENGTH + " characters. " +
+                    "Set the JWT_SECRET environment variable with a secure value.");
+        }
+    }
 
     private SecretKey getSigningKey() {
         return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));

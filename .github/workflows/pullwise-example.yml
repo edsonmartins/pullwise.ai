@@ -1,0 +1,35 @@
+# Example: Using Pullwise GitHub Action for AI code reviews
+# Add this to your repository's .github/workflows/ directory
+#
+# Prerequisites:
+# 1. Sign up at https://pullwise.ai or set up a self-hosted instance
+# 2. Create an API key in the Pullwise dashboard
+# 3. Add the API key as a repository secret named PULLWISE_API_KEY
+
+name: Pullwise Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    name: AI Code Review
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pullwise Review
+        uses: pullwise/pullwise-action@v1
+        with:
+          api-key: ${{ secrets.PULLWISE_API_KEY }}
+          # api-url: https://your-instance.com  # For self-hosted
+          sast-enabled: 'true'
+          llm-enabled: 'true'
+          min-severity: 'LOW'
+          inline-comments: 'true'
+          fail-on-critical: 'true'

@@ -1,0 +1,80 @@
+<idea-plugin>
+    <id>com.pullwise.intellij</id>
+    <name>Pullwise Code Review</name>
+    <version>0.1.0</version>
+    <vendor email="support@pullwise.ai" url="https://pullwise.ai">Pullwise</vendor>
+
+    <description><![CDATA[
+    AI-powered code review integration for Pullwise.<br/>
+    Displays review issues directly in the editor with severity-based highlighting,
+    status bar widget, and one-click review triggering.
+    ]]></description>
+
+    <depends>com.intellij.modules.lang</depends>
+    <depends>Git4Idea</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <externalAnnotator
+                language=""
+                implementationClass="com.pullwise.intellij.inspection.PullwiseExternalAnnotator"/>
+
+        <statusBarWidgetFactory
+                implementation="com.pullwise.intellij.ui.PullwiseStatusBarWidgetFactory"
+                id="PullwiseStatusBar"
+                order="after Position"/>
+
+        <projectConfigurable
+                instance="com.pullwise.intellij.settings.PullwiseSettingsConfigurable"
+                displayName="Pullwise"
+                id="com.pullwise.intellij.settings"/>
+
+        <applicationService
+                serviceImplementation="com.pullwise.intellij.auth.AuthManager"/>
+
+        <applicationService
+                serviceImplementation="com.pullwise.intellij.api.ApiClient"/>
+
+        <projectService
+                serviceImplementation="com.pullwise.intellij.service.PullwiseProjectService"/>
+    </extensions>
+
+    <actions>
+        <group id="Pullwise.Menu" text="Pullwise" popup="true">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+
+            <action id="Pullwise.Login"
+                    class="com.pullwise.intellij.actions.LoginAction"
+                    text="Login"
+                    description="Authenticate with Pullwise API"/>
+
+            <action id="Pullwise.Logout"
+                    class="com.pullwise.intellij.actions.LogoutAction"
+                    text="Logout"
+                    description="Clear Pullwise authentication"/>
+
+            <separator/>
+
+            <action id="Pullwise.TriggerReview"
+                    class="com.pullwise.intellij.actions.TriggerReviewAction"
+                    text="Trigger Review"
+                    description="Trigger a code review for the current branch PR"/>
+
+            <action id="Pullwise.ShowIssues"
+                    class="com.pullwise.intellij.actions.ShowIssuesAction"
+                    text="Show Issues"
+                    description="Fetch and display issues from the latest review"/>
+
+            <separator/>
+
+            <action id="Pullwise.InstallHooks"
+                    class="com.pullwise.intellij.actions.InstallHooksAction"
+                    text="Install Git Hooks"
+                    description="Install Pullwise pre-commit hooks"/>
+
+            <action id="Pullwise.ClearDiagnostics"
+                    class="com.pullwise.intellij.actions.ClearDiagnosticsAction"
+                    text="Clear Issues"
+                    description="Clear all Pullwise issue highlights"/>
+        </group>
+    </actions>
+</idea-plugin>

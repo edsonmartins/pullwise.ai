@@ -19,6 +19,9 @@ import { ProjectsPage } from '@/pages/ProjectsPage'
 import { PullRequestsPage } from '@/pages/PullRequestsPage'
 import { ReviewsPage } from '@/pages/ReviewsPage'
 import { SettingsPage } from '@/pages/SettingsPage'
+import ProjectDetailPage from '@/pages/ProjectDetailPage'
+import ProjectSettingsPage from '@/pages/ProjectSettingsPage'
+import ReviewDetailPage from '@/pages/ReviewDetailPage'
 
 // V2 Pages - lazy loaded para code splitting
 const AnalyticsDashboardPage = lazy(() => import('@/pages/v2/AnalyticsDashboardPage').then(m => ({ default: m.AnalyticsDashboardPage })))
@@ -94,8 +97,11 @@ export default function App() {
                         <Route path="/" element={<DashboardPage />} />
                         <Route path="/organizations" element={<OrganizationsPage />} />
                         <Route path="/projects" element={<ProjectsPage />} />
+                        <Route path="/projects/:id" element={<ProjectDetailPage />} />
+                        <Route path="/projects/:id/settings" element={<ProjectSettingsPage />} />
                         <Route path="/projects/:id/pull-requests" element={<PullRequestsPage />} />
                         <Route path="/reviews" element={<ReviewsPage />} />
+                        <Route path="/reviews/:id" element={<ReviewDetailPage />} />
                         <Route path="/settings" element={<SettingsPage />} />
 
                         {/* V2 Routes - lazy loaded */}

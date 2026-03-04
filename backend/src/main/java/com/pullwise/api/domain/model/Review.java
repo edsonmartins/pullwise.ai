@@ -74,6 +74,9 @@ public class Review {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    @Column(name = "coverage_percentage")
+    private java.math.BigDecimal coveragePercentage;
+
     @Column(name = "review_comment_id", length = 100)
     private String reviewCommentId; // ID do comentário postado no PR
 

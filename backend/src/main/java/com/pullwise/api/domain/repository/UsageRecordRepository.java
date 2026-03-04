@@ -74,4 +74,11 @@ public interface UsageRecordRepository extends JpaRepository<UsageRecord, Long> 
             @Param("startPeriod") String startPeriod,
             @Param("endPeriod") String endPeriod
     );
+
+    @Query("SELECT u.organization.id, COALESCE(SUM(u.metricValue), 0) FROM UsageRecord u WHERE u.organization.id IN :orgIds AND u.period = :period AND u.metricType = :metricType GROUP BY u.organization.id")
+    List<Object[]> sumByOrganizationIdsAndPeriodAndMetricType(
+            @Param("orgIds") List<Long> orgIds,
+            @Param("period") String period,
+            @Param("metricType") String metricType
+    );
 }

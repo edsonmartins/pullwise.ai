@@ -1,7 +1,10 @@
 package com.pullwise.api.application.service.review;
 
+import com.pullwise.api.application.service.attestation.AttestationService;
 import com.pullwise.api.application.service.billing.RateLimitingService;
 import com.pullwise.api.application.service.billing.RateLimitingService.RateLimitExceededException;
+import com.pullwise.api.application.service.config.ConfigurationResolver;
+import com.pullwise.api.application.service.integration.AzureDevOpsService;
 import com.pullwise.api.application.service.integration.BitBucketService;
 import com.pullwise.api.application.service.integration.GitHubService;
 import com.pullwise.api.application.service.integration.GitLabService;
@@ -39,9 +42,14 @@ class ReviewOrchestratorTest {
     @Mock private GitHubService gitHubService;
     @Mock private BitBucketService bitBucketService;
     @Mock private GitLabService gitLabService;
+    @Mock private AzureDevOpsService azureDevOpsService;
     @Mock private UsageRecordRepository usageRecordRepository;
     @Mock private RateLimitingService rateLimitingService;
     @Mock private NotificationService notificationService;
+    @Mock private ConfigurationResolver configurationResolver;
+    @Mock private RiskAssessmentService riskAssessmentService;
+    @Mock private CoverageTrackingService coverageTrackingService;
+    @Mock private AttestationService attestationService;
 
     @BeforeEach
     void setUp() {
@@ -49,8 +57,9 @@ class ReviewOrchestratorTest {
                 reviewRepository, issueRepository, pullRequestRepository,
                 sastAnalysisService, llmReviewService, consolidationService,
                 postingService, gitHubService, bitBucketService,
-                gitLabService, usageRecordRepository, rateLimitingService,
-                notificationService
+                gitLabService, azureDevOpsService, usageRecordRepository, rateLimitingService,
+                notificationService, configurationResolver, riskAssessmentService,
+                coverageTrackingService, attestationService
         );
     }
 

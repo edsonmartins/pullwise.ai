@@ -54,4 +54,11 @@ public interface IssueRepository extends JpaRepository<Issue, Long> {
 
     @Query("SELECT COUNT(i) FROM Issue i WHERE i.review.pullRequest.project.organization.id = :orgId AND i.type = :type AND i.createdAt >= :start AND i.createdAt <= :end")
     long countByReviewOrganizationIdAndIssueTypeAndCreatedAtBetween(@Param("orgId") Long orgId, @Param("type") IssueType type, @Param("start") java.time.LocalDateTime start, @Param("end") java.time.LocalDateTime end);
+
+    /**
+     * Batch query to get severity counts per review in a single query (avoids N+1).
+     * Returns Object[] = { reviewId, severity, count }
+     */
+    @Query("SELECT i.review.id, i.severity, COUNT(i) FROM Issue i WHERE i.review.id IN :reviewIds GROUP BY i.review.id, i.severity")
+    List<Object[]> countBySeverityGroupedByReviewId(@Param("reviewIds") List<Long> reviewIds);
 }

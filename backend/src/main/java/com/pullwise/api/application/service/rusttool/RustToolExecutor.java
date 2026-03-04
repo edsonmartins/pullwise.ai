@@ -430,7 +430,7 @@ public class RustToolExecutor {
                     output.append(line).append("\n");
                 }
             } catch (Exception e) {
-                // Ignore
+                log.warn("Error reading process output stream: {}", e.getMessage());
             }
         }
 

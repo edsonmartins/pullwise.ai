@@ -9,6 +9,7 @@ export const showReviewCommand = new Command('show')
   .description('Show details of a review')
   .argument('<reviewId>', 'Review ID')
   .option('-i, --issues', 'Show all issues')
+  .option('-I, --interactive', 'Enter interactive review mode after showing details')
   .action(async (reviewId, options) => {
     try {
       const spinner = new Spinner('Fetching review details...')
@@ -63,6 +64,15 @@ Tokens Used: ${review.tokensUsed || 'N/A'}
           logger.log(chalk.blue.bold(`\nLow (${lowIssues.length})`))
           console.log(formatIssueTable(lowIssues))
         }
+      }
+
+      // Interactive mode
+      if (options.interactive && review.issues.length > 0) {
+        logger.newLine()
+        logger.info('Entering interactive mode...')
+        // Dynamically import to avoid circular dependency
+        const { interactReviewCommand } = await import('./interact')
+        await interactReviewCommand.parseAsync([reviewId], { from: 'user' })
       }
     } catch (error: any) {
       logger.error('Failed to fetch review', error.message)

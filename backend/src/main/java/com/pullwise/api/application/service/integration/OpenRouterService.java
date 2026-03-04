@@ -26,7 +26,11 @@ public class OpenRouterService {
     @Value("${integrations.openrouter.model:anthropic/claude-3-haiku}")
     private String model;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
+
+    public OpenRouterService(RestTemplate restTemplate) {
+        this.restTemplate = restTemplate;
+    }
 
     /**
      * Analisa código usando OpenRouter API.

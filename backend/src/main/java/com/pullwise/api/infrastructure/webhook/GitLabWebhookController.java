@@ -2,11 +2,16 @@ package com.pullwise.api.infrastructure.webhook;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pullwise.api.application.service.config.ConfigurationResolver;
+import com.pullwise.api.domain.constants.ConfigKeys;
 import com.pullwise.api.application.service.integration.GitLabService;
 import com.pullwise.api.application.service.integration.GitLabService.GitLabWebhookPayload;
+import com.pullwise.api.application.service.integration.SlashCommandService;
 import com.pullwise.api.application.service.review.ReviewOrchestrator;
+import com.pullwise.api.domain.enums.Platform;
 import com.pullwise.api.domain.model.Project;
 import com.pullwise.api.domain.model.PullRequest;
+import com.pullwise.api.domain.repository.ProjectRepository;
+import com.pullwise.api.domain.repository.PullRequestRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +34,9 @@ public class GitLabWebhookController {
     private final GitLabService gitLabService;
     private final ReviewOrchestrator reviewOrchestrator;
     private final ConfigurationResolver configurationResolver;
+    private final SlashCommandService slashCommandService;
+    private final ProjectRepository projectRepository;
+    private final PullRequestRepository pullRequestRepository;
     private final ObjectMapper objectMapper;
 
     @Value("${integrations.gitlab.webhook-secret:}")
@@ -132,10 +140,48 @@ public class GitLabWebhookController {
     }
 
     /**
-     * Processa eventos de notas/comentários.
+     * Processa eventos de notas/comentários (slash commands).
+     * GitLab Note Hook envia o body em objectAttributes.note (reusing description field).
      */
     private void handleNoteEvent(GitLabWebhookPayload payload) {
         log.info("Processing GitLab note event");
+
+        GitLabWebhookPayload.MergeRequestAttributes mr = payload.getObjectAttributes();
+        if (mr == null) return;
+
+        // O Note Hook reutiliza objectAttributes — o campo "description" contém o body do note
+        String noteBody = mr.getDescription();
+        if (noteBody == null || noteBody.isBlank()) return;
+
+        if (!slashCommandService.containsCommand(noteBody)) return;
+
+        // Verificar que o note é num MR (não numa issue)
+        if (payload.getProject() == null) return;
+
+        String projectIdStr = String.valueOf(payload.getProject().getId());
+        Project project = projectRepository.findByRepositoryIdAndPlatform(
+                projectIdStr, Platform.GITLAB).orElse(null);
+
+        if (project == null) {
+            log.warn("Project not found for GitLab project ID {}", projectIdStr);
+            return;
+        }
+
+        // O MR IID vem do objectAttributes
+        Integer mrIid = mr.getIid();
+        if (mrIid == null) return;
+
+        PullRequest pr = pullRequestRepository.findByProjectIdAndPrNumber(
+                project.getId(), mrIid).orElse(null);
+
+        if (pr == null) {
+            log.warn("MR !{} not found for project {}", mrIid, project.getName());
+            return;
+        }
+
+        String username = payload.getUser() != null ? payload.getUser().getUsername() : "unknown";
+        log.info("Slash command detected in GitLab MR !{} by {}", mrIid, username);
+        slashCommandService.executeCommand(pr.getId(), noteBody, username);
     }
 
     /**
@@ -146,7 +192,7 @@ public class GitLabWebhookController {
             return true;
         }
         return Boolean.parseBoolean(
-                configurationResolver.getConfig(project.getId(), "review.auto_post")
+                configurationResolver.getConfig(project.getId(), ConfigKeys.REVIEW_AUTO_POST)
         );
     }
 

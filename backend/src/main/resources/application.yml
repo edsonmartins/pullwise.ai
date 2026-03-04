@@ -3,9 +3,9 @@ spring:
     name: pullwise-api
 
   datasource:
-    url: ${DB_URL:jdbc:postgresql://192.168.1.110:5444/pullwise?ssl=false&serverTimezone=America/Sao_Paulo}
-    username: ${DB_USER:admin}
-    password: ${DB_PASSWORD:Rapidex@727204}
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/pullwise?ssl=false&serverTimezone=America/Sao_Paulo}
+    username: ${DB_USER:pullwise}
+    password: ${DB_PASSWORD:pullwise}
     hikari:
       maximum-pool-size: 10
       minimum-idle: 2
@@ -32,7 +32,7 @@ spring:
   # External Redis
   data:
     redis:
-      host: ${REDIS_HOST:192.168.1.110}
+      host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
       database: ${REDIS_DATABASE:0}
@@ -46,9 +46,9 @@ spring:
 
   # Artemis/ActiveMQ
   activemq:
-    broker-url: ${ARTEMIS_BROKER_URL:tcp://192.168.1.110:61616}
-    user: ${ARTEMIS_BROKER_USERNAME:admin}
-    password: ${ARTEMIS_BROKER_PASSWORD:admin}
+    broker-url: ${ARTEMIS_BROKER_URL:tcp://localhost:61616}
+    user: ${ARTEMIS_BROKER_USERNAME:guest}
+    password: ${ARTEMIS_BROKER_PASSWORD:guest}
 
   jms:
     listener:
@@ -82,6 +82,11 @@ integrations:
     api-url: ${BITBUCKET_API_URL:https://api.bitbucket.org/2.0}
     username: ${BITBUCKET_USERNAME:}
     app-password: ${BITBUCKET_APP_PASSWORD:}
+    webhook-secret: ${BITBUCKET_WEBHOOK_SECRET:}
+
+  azure-devops:
+    api-version: ${AZURE_DEVOPS_API_VERSION:7.1}
+    webhook-secret: ${AZURE_DEVOPS_WEBHOOK_SECRET:}
 
   slack:
     default-webhook-url: ${SLACK_WEBHOOK_URL:}
@@ -164,6 +169,18 @@ llm:
 
 # Pullwise LLM Configuration (LangChain4j)
 pullwise:
+  review:
+    post-as-comment: true
+    include-summary: true
+    inline-comments: true
+    min-severity: LOW
+    max-files: 50
+    max-lines-per-file: 1000
+    chunk-size: 10
+    language: en  # en, pt, es — configurable per project via review.language
+  attestation:
+    signing-key: ${PULLWISE_ATTESTATION_KEY:pullwise-attestation-key-change-in-production}
+    key-id: ${PULLWISE_ATTESTATION_KEY_ID:default}
   llm:
     enabled: true
     provider: OPENROUTER  # OPENROUTER, OLLAMA, OPENAI, ANTHROPIC, DEEPSEEK, GEMMA
@@ -208,7 +225,7 @@ logging:
 # STOMP WebSocket (Artemis)
 vendax:
   stomp:
-    host: ${VENDAX_STOMP_HOST:192.168.1.110}
-    port: ${VENDAX_STOMP_PORT:61613}
-    username: ${VENDAX_STOMP_USERNAME:admin}
-    password: ${VENDAX_STOMP_PASSWORD:admin}
+    host: ${STOMP_HOST:localhost}
+    port: ${STOMP_PORT:61613}
+    username: ${STOMP_USER:guest}
+    password: ${STOMP_PASSWORD:guest}

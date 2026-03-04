@@ -412,7 +412,7 @@ export function CodeGraphPage({ projectId }: CodeGraphPageProps) {
         })
       )
     } catch {
-      console.error('Failed to calculate blast radius')
+      // Blast radius calculation failed
     } finally {
       setIsCodeGraphLoading(false)
     }
@@ -464,7 +464,7 @@ export function CodeGraphPage({ projectId }: CodeGraphPageProps) {
         <Group>
           <Select
             value={layoutType}
-            onChange={(value) => setLayoutType(value as any)}
+            onChange={(value) => setLayoutType((value || 'dagre') as 'dagre' | 'force' | 'hierarchical')}
             data={[
               { value: 'dagre', label: 'Hierárquico' },
               { value: 'force', label: 'Force-Directed' },

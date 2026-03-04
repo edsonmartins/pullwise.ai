@@ -3,9 +3,9 @@ spring:
     name: pullwise-api
 
   datasource:
-    url: jdbc:postgresql://192.168.1.110:5444/pullwise?ssl=false&serverTimezone=America/Sao_Paulo
-    username: admin
-    password: Rapidex@727204
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/pullwise?ssl=false&serverTimezone=America/Sao_Paulo}
+    username: ${DB_USER:pullwise}
+    password: ${DB_PASSWORD:pullwise}
 
   jpa:
     hibernate:
@@ -19,17 +19,17 @@ spring:
   # External Redis
   data:
     redis:
-      host: 192.168.1.110
-      port: 6379
-      password:
-      database: 0
-      timeout: 5000
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
+      timeout: ${REDIS_TIMEOUT:5000}
 
   # Artemis/ActiveMQ
   activemq:
-    broker-url: tcp://192.168.1.110:61616
-    user: admin
-    password: admin
+    broker-url: ${ARTEMIS_BROKER_URL:tcp://localhost:61616}
+    user: ${ARTEMIS_BROKER_USERNAME:guest}
+    password: ${ARTEMIS_BROKER_PASSWORD:guest}
 
 logging:
   level:

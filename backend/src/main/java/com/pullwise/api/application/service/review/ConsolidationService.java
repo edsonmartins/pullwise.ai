@@ -91,11 +91,12 @@ public class ConsolidationService {
 
     /**
      * Filtra issues por severidade mínima.
+     * Mantém apenas issues com severidade >= minSeverity (level menor = mais severo).
+     * Ex: minSeverity=HIGH mantém CRITICAL e HIGH, filtra MEDIUM/LOW/INFO.
      */
     public List<Issue> filterByMinSeverity(List<Issue> issues, com.pullwise.api.domain.enums.Severity minSeverity) {
         return issues.stream()
-                .filter(issue -> !issue.getSeverity().isHigherThan(minSeverity) ||
-                        issue.getSeverity().getLevel() == minSeverity.getLevel())
+                .filter(issue -> issue.getSeverity().getLevel() <= minSeverity.getLevel())
                 .toList();
     }
 }

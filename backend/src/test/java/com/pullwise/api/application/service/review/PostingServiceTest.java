@@ -1,5 +1,6 @@
 package com.pullwise.api.application.service.review;
 
+import com.pullwise.api.application.service.config.ConfigurationResolver;
 import com.pullwise.api.application.service.integration.BitBucketService;
 import com.pullwise.api.application.service.integration.GitHubService;
 import com.pullwise.api.application.service.integration.GitLabService;
@@ -32,12 +33,14 @@ class PostingServiceTest {
     @Mock private GitHubService gitHubService;
     @Mock private BitBucketService bitBucketService;
     @Mock private GitLabService gitLabService;
+    @Mock private ConfigurationResolver configurationResolver;
 
     @BeforeEach
     void setUp() {
-        postingService = new PostingService(gitHubService, bitBucketService, gitLabService);
+        postingService = new PostingService(gitHubService, bitBucketService, gitLabService, configurationResolver);
         ReflectionTestUtils.setField(postingService, "postAsComment", true);
         ReflectionTestUtils.setField(postingService, "includeSummary", true);
+        ReflectionTestUtils.setField(postingService, "inlineCommentsEnabled", true);
     }
 
     @Test

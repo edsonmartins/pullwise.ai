@@ -1,5 +1,6 @@
 package com.pullwise.api.application.service.integration;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pullwise.api.domain.model.Project;
 import com.pullwise.api.domain.model.PullRequest;
 import com.pullwise.api.domain.repository.ProjectRepository;
@@ -7,13 +8,12 @@ import com.pullwise.api.domain.repository.PullRequestRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
+import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Serviço de integração com a API do GitHub.
@@ -32,7 +32,8 @@ public class GitHubService {
     @Value("${integrations.github.private-key}")
     private String githubPrivateKey;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
+    private final ObjectMapper objectMapper;
     private final ProjectRepository projectRepository;
     private final PullRequestRepository pullRequestRepository;
 
@@ -84,6 +85,102 @@ public class GitHubService {
         } catch (Exception e) {
             log.error("Failed to post comment for {}/{} #{}", owner, repo, prNumber, e);
             throw new RuntimeException("Failed to post comment", e);
+        }
+    }
+
+    /**
+     * Cria um Pull Request Review com comentários inline.
+     * POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews
+     *
+     * @param project o projeto
+     * @param prNumber número do PR
+     * @param summaryBody corpo do review summary
+     * @param inlineComments lista de comentários inline (path, line, body)
+     */
+    public String createPullRequestReview(Project project, int prNumber,
+                                           String summaryBody, List<InlineComment> inlineComments) {
+        String owner = extractOwner(project.getRepositoryUrl());
+        String repo = extractRepo(project.getRepositoryUrl());
+
+        String url = String.format("%s/repos/%s/%s/pulls/%d/reviews",
+                githubApiUrl, owner, repo, prNumber);
+
+        try {
+            HttpHeaders headers = createHeaders(project);
+            headers.setContentType(MediaType.APPLICATION_JSON);
+
+            List<Map<String, Object>> comments = inlineComments.stream()
+                    .map(c -> {
+                        Map<String, Object> comment = new java.util.HashMap<>();
+                        comment.put("path", c.path());
+                        comment.put("line", c.line());
+                        comment.put("body", c.body());
+                        return comment;
+                    })
+                    .toList();
+
+            Map<String, Object> body = Map.of(
+                    "body", summaryBody,
+                    "event", "COMMENT",
+                    "comments", comments
+            );
+
+            String jsonBody = objectMapper.writeValueAsString(body);
+            HttpEntity<String> entity = new HttpEntity<>(jsonBody, headers);
+
+            ResponseEntity<String> response = restTemplate.exchange(
+                    url, HttpMethod.POST, entity, String.class);
+
+            if (response.getStatusCode().is2xxSuccessful()) {
+                log.info("Created inline review for {}/{} PR #{} with {} comments",
+                        owner, repo, prNumber, inlineComments.size());
+                return "ok";
+            }
+            return null;
+
+        } catch (Exception e) {
+            log.error("Failed to create inline review for {}/{} PR #{}: {}",
+                    owner, repo, prNumber, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Aprova um Pull Request via GitHub Reviews API.
+     * POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews com event=APPROVE
+     */
+    public boolean approvePullRequest(Project project, int prNumber, String body) {
+        String owner = extractOwner(project.getRepositoryUrl());
+        String repo = extractRepo(project.getRepositoryUrl());
+
+        String url = String.format("%s/repos/%s/%s/pulls/%d/reviews",
+                githubApiUrl, owner, repo, prNumber);
+
+        try {
+            HttpHeaders headers = createHeaders(project);
+            headers.setContentType(MediaType.APPLICATION_JSON);
+
+            Map<String, Object> requestBody = Map.of(
+                    "body", body,
+                    "event", "APPROVE"
+            );
+
+            String jsonBody = objectMapper.writeValueAsString(requestBody);
+            HttpEntity<String> entity = new HttpEntity<>(jsonBody, headers);
+
+            ResponseEntity<String> response = restTemplate.exchange(
+                    url, HttpMethod.POST, entity, String.class);
+
+            if (response.getStatusCode().is2xxSuccessful()) {
+                log.info("Auto-approved PR #{} for {}/{}", prNumber, owner, repo);
+                return true;
+            }
+            return false;
+
+        } catch (Exception e) {
+            log.error("Failed to auto-approve PR #{} for {}/{}: {}",
+                    prNumber, owner, repo, e.getMessage());
+            return false;
         }
     }
 
@@ -173,11 +270,17 @@ public class GitHubService {
 
     public record CommentRequest(String body) {}
     public record CommentResponse(Long id, String body) {}
+    public record InlineComment(String path, int line, String body) {}
 
     public static class GitHubWebhookPayload {
         private Repository repository;
         private PullRequestDTO pullRequest;
         private String action;
+        private Comment comment;
+        private IssueDTO issue;
+        private Installation installation;
+        private java.util.List<Repository> repositories;
+        private String ref;
 
         public Repository getRepository() { return repository; }
         public void setRepository(Repository repository) { this.repository = repository; }
@@ -185,11 +288,22 @@ public class GitHubService {
         public void setPullRequest(PullRequestDTO pullRequest) { this.pullRequest = pullRequest; }
         public String getAction() { return action; }
         public void setAction(String action) { this.action = action; }
+        public Comment getComment() { return comment; }
+        public void setComment(Comment comment) { this.comment = comment; }
+        public IssueDTO getIssue() { return issue; }
+        public void setIssue(IssueDTO issue) { this.issue = issue; }
+        public Installation getInstallation() { return installation; }
+        public void setInstallation(Installation installation) { this.installation = installation; }
+        public java.util.List<Repository> getRepositories() { return repositories; }
+        public void setRepositories(java.util.List<Repository> repositories) { this.repositories = repositories; }
+        public String getRef() { return ref; }
+        public void setRef(String ref) { this.ref = ref; }
 
         public static class Repository {
             private Long id;
             private String name;
             private String fullName;
+            private String htmlUrl;
 
             public Long getId() { return id; }
             public void setId(Long id) { this.id = id; }
@@ -197,6 +311,34 @@ public class GitHubService {
             public void setName(String name) { this.name = name; }
             public String getFullName() { return fullName; }
             public void setFullName(String fullName) { this.fullName = fullName; }
+            public String getHtmlUrl() { return htmlUrl; }
+            public void setHtmlUrl(String htmlUrl) { this.htmlUrl = htmlUrl; }
+        }
+
+        public static class Installation {
+            private Long id;
+            private Account account;
+            private String targetType; // "Organization" or "User"
+
+            public Long getId() { return id; }
+            public void setId(Long id) { this.id = id; }
+            public Account getAccount() { return account; }
+            public void setAccount(Account account) { this.account = account; }
+            public String getTargetType() { return targetType; }
+            public void setTargetType(String targetType) { this.targetType = targetType; }
+        }
+
+        public static class Account {
+            private Long id;
+            private String login;
+            private String avatarUrl;
+
+            public Long getId() { return id; }
+            public void setId(Long id) { this.id = id; }
+            public String getLogin() { return login; }
+            public void setLogin(String login) { this.login = login; }
+            public String getAvatarUrl() { return avatarUrl; }
+            public void setAvatarUrl(String avatarUrl) { this.avatarUrl = avatarUrl; }
         }
 
         public static class PullRequestDTO {
@@ -255,6 +397,36 @@ public class GitHubService {
 
             public String getLogin() { return login; }
             public void setLogin(String login) { this.login = login; }
+        }
+
+        public static class Comment {
+            private Long id;
+            private String body;
+            private User user;
+
+            public Long getId() { return id; }
+            public void setId(Long id) { this.id = id; }
+            public String getBody() { return body; }
+            public void setBody(String body) { this.body = body; }
+            public User getUser() { return user; }
+            public void setUser(User user) { this.user = user; }
+        }
+
+        public static class IssueDTO {
+            private Integer number;
+            private PullRequestRef pullRequest;
+
+            public Integer getNumber() { return number; }
+            public void setNumber(Integer number) { this.number = number; }
+            public PullRequestRef getPullRequest() { return pullRequest; }
+            public void setPullRequest(PullRequestRef pullRequest) { this.pullRequest = pullRequest; }
+        }
+
+        public static class PullRequestRef {
+            private String url;
+
+            public String getUrl() { return url; }
+            public void setUrl(String url) { this.url = url; }
         }
     }
 }

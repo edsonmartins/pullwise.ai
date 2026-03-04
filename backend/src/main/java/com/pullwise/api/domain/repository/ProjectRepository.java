@@ -2,6 +2,8 @@ package com.pullwise.api.domain.repository;
 
 import com.pullwise.api.domain.model.Project;
 import com.pullwise.api.domain.enums.Platform;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -21,6 +23,9 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
     @Query("SELECT p FROM Project p WHERE p.organization.id = :orgId AND p.isActive = true")
     List<Project> findActiveByOrganizationId(@Param("orgId") Long orgId);
 
+    @Query("SELECT p FROM Project p WHERE p.organization.id IN :orgIds AND p.isActive = true")
+    Page<Project> findActiveByOrganizationIds(@Param("orgIds") List<Long> orgIds, Pageable pageable);
+
     Optional<Project> findByOrganizationIdAndName(Long organizationId, String name);
 
     @Query("SELECT p FROM Project p WHERE p.organization.id = :orgId AND p.repositoryId = :repoId")
@@ -36,4 +41,7 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
     long countActiveByOrganizationId(@Param("orgId") Long orgId);
 
     boolean existsByOrganizationIdAndName(Long organizationId, String name);
+
+    @Query("SELECT p.organization.id, COUNT(p) FROM Project p WHERE p.organization.id IN :orgIds AND p.isActive = true GROUP BY p.organization.id")
+    List<Object[]> countActiveByOrganizationIds(@Param("orgIds") List<Long> orgIds);
 }
