@@ -61,4 +61,22 @@ public interface IssueRepository extends JpaRepository<Issue, Long> {
      */
     @Query("SELECT i.review.id, i.severity, COUNT(i) FROM Issue i WHERE i.review.id IN :reviewIds GROUP BY i.review.id, i.severity")
     List<Object[]> countBySeverityGroupedByReviewId(@Param("reviewIds") List<Long> reviewIds);
+
+    /**
+     * Conta issues por arquivo num período. Usado pelo HotspotComputeService
+     * como proxy de churn (frequência de modificação correlacionada com bugs).
+     * Retorna Object[] = { filePath, count }.
+     */
+    @Query("""
+            SELECT i.filePath, COUNT(i)
+            FROM Issue i
+            WHERE i.review.pullRequest.project.id = :projectId
+              AND i.filePath IS NOT NULL
+              AND i.createdAt >= :since
+            GROUP BY i.filePath
+            """)
+    List<Object[]> countByProjectIdGroupedByFilePathSince(
+            @Param("projectId") Long projectId,
+            @Param("since") java.time.LocalDateTime since
+    );
 }
