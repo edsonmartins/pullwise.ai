@@ -3,7 +3,6 @@ package com.pullwise.api.application.service.llm.config;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.util.HashMap;
@@ -28,7 +27,6 @@ import java.util.Map;
  * </pre>
  */
 @Data
-@Component
 @ConfigurationProperties(prefix = "pullwise.llm")
 public class LLMChatModelProperties {
 

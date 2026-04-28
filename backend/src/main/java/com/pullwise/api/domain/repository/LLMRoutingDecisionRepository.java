@@ -43,7 +43,7 @@ public interface LLMRoutingDecisionRepository extends JpaRepository<LLMRoutingDe
      * Calcula o custo total por organização em um período.
      */
     @Query("SELECT SUM(d.costUsd) FROM LLMRoutingDecision d " +
-           "WHERE d.review.organization.id = :orgId AND d.createdAt BETWEEN :start AND :end")
+           "WHERE d.review.pullRequest.project.organization.id = :orgId AND d.createdAt BETWEEN :start AND :end")
     Optional<java.math.BigDecimal> sumCostByOrganizationAndPeriod(@Param("orgId") Long orgId,
                                                                    @Param("start") LocalDateTime start,
                                                                    @Param("end") LocalDateTime end);

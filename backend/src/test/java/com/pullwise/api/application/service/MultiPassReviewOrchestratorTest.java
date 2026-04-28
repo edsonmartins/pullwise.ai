@@ -1,5 +1,6 @@
 package com.pullwise.api.application.service;
 
+import com.pullwise.api.application.service.integration.AzureDevOpsService;
 import com.pullwise.api.application.service.integration.BitBucketService;
 import com.pullwise.api.application.service.integration.GitHubService;
 import com.pullwise.api.application.service.integration.GitLabService;
@@ -8,7 +9,9 @@ import com.pullwise.api.application.service.review.pipeline.MultiPassReviewOrche
 import com.pullwise.api.application.service.review.pipeline.MultiPassReviewOrchestrator.PassResult;
 import com.pullwise.api.application.service.review.pipeline.MultiPassReviewOrchestrator.ReviewResult;
 import com.pullwise.api.application.service.review.pipeline.pass.*;
+import com.pullwise.api.application.service.review.pipeline.synthesis.BlastRadiusConsolidator;
 import com.pullwise.api.application.service.review.pipeline.synthesis.IssueDuplicationDetector;
+import com.pullwise.api.application.service.review.pipeline.synthesis.IssuePrioritizer;
 import com.pullwise.api.application.service.review.pipeline.synthesis.ResultSynthesizer;
 import com.pullwise.api.domain.model.*;
 import com.pullwise.api.domain.enums.*;
@@ -39,19 +42,23 @@ class MultiPassReviewOrchestratorTest {
     @Mock private CodeGraphImpactPass codeGraphImpactPass;
     @Mock private ResultSynthesizer resultSynthesizer;
     @Mock private IssueDuplicationDetector duplicationDetector;
+    @Mock private BlastRadiusConsolidator blastRadiusConsolidator;
+    @Mock private IssuePrioritizer issuePrioritizer;
     @Mock private MultiModelLLMRouter llmRouter;
     @Mock private IssueRepository issueRepository;
     @Mock private GitHubService gitHubService;
     @Mock private BitBucketService bitBucketService;
     @Mock private GitLabService gitLabService;
+    @Mock private AzureDevOpsService azureDevOpsService;
 
     @BeforeEach
     void setUp() {
         orchestrator = new MultiPassReviewOrchestrator(
                 sastAggregatorPass, llmPrimaryPass, securityFocusedPass,
                 codeGraphImpactPass, resultSynthesizer, duplicationDetector,
+                blastRadiusConsolidator, issuePrioritizer,
                 llmRouter, issueRepository, gitHubService,
-                bitBucketService, gitLabService
+                bitBucketService, gitLabService, azureDevOpsService
         );
     }
 

@@ -3,6 +3,7 @@ import { MantineProvider, createTheme, Loader, Stack, Text } from '@mantine/core
 import { Notifications } from '@mantine/notifications'
 import { ModalsProvider } from '@mantine/modals'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ThemeProvider } from '@/components/theme-provider'
 import { LanguageProvider } from '@/components/language-provider'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
@@ -50,6 +51,16 @@ const theme = createTheme({
   fontFamily: 'Inter, sans-serif',
 })
 
+// QueryClient compartilhado entre todas as páginas que usam @tanstack/react-query
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+})
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
 
@@ -70,6 +81,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
+    <QueryClientProvider client={queryClient}>
     <ThemeProvider defaultTheme="system">
       <LanguageProvider>
         <MantineProvider theme={theme}>
@@ -123,5 +135,6 @@ export default function App() {
       </MantineProvider>
     </LanguageProvider>
     </ThemeProvider>
+    </QueryClientProvider>
   )
 }
