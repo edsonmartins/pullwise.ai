@@ -17,6 +17,7 @@ import com.pullwise.api.application.service.graph.model.ClassInfo.ClassInfoBuild
 import com.pullwise.api.application.service.graph.model.CodeAnalysisResult;
 import com.pullwise.api.application.service.graph.model.MethodInfo;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
@@ -47,6 +48,32 @@ public class JavaParserService {
 
     // Cache de análises por arquivo
     private final Map<String, CodeAnalysisResult> analysisCache = new ConcurrentHashMap<>();
+
+    // Hook opcional para persistir o grafo (Code Graph v2 / Blast-Radius).
+    // Setter injection mantém compatibilidade com testes que instanciam direto.
+    private GraphPersistenceService graphPersistenceService;
+
+    @Autowired(required = false)
+    public void setGraphPersistenceService(GraphPersistenceService graphPersistenceService) {
+        this.graphPersistenceService = graphPersistenceService;
+    }
+
+    /**
+     * Analisa o arquivo e, se {@code projectId} estiver presente e o
+     * {@link GraphPersistenceService} disponível no contexto, persiste o resultado
+     * no Code Graph v2.
+     */
+    public CodeAnalysisResult analyzeAndPersist(File file, Long projectId) {
+        CodeAnalysisResult result = analyzeFile(file, projectId == null ? null : projectId.toString());
+        if (graphPersistenceService != null && projectId != null) {
+            try {
+                graphPersistenceService.upsertFromAnalysis(projectId, result);
+            } catch (Exception e) {
+                log.warn("Failed to persist code graph for {}: {}", file.getName(), e.getMessage());
+            }
+        }
+        return result;
+    }
 
     /**
      * Analisa um arquivo Java e retorna sua estrutura completa.
