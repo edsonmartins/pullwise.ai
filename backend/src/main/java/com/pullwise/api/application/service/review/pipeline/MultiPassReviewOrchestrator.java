@@ -5,7 +5,10 @@ import com.pullwise.api.application.service.integration.BitBucketService;
 import com.pullwise.api.application.service.integration.GitHubService;
 import com.pullwise.api.application.service.integration.GitLabService;
 import com.pullwise.api.application.service.llm.router.MultiModelLLMRouter;
+import com.pullwise.api.application.service.graph.blast.BlastRadiusResult;
 import com.pullwise.api.application.service.review.pipeline.pass.*;
+import com.pullwise.api.application.service.review.pipeline.synthesis.BlastRadiusConsolidator;
+import com.pullwise.api.application.service.review.pipeline.synthesis.IssuePrioritizer;
 import com.pullwise.api.application.service.review.pipeline.synthesis.ResultSynthesizer;
 import com.pullwise.api.application.service.review.pipeline.synthesis.IssueDuplicationDetector;
 import com.pullwise.api.domain.model.Issue;
@@ -53,6 +56,8 @@ public class MultiPassReviewOrchestrator {
     private final CodeGraphImpactPass codeGraphImpactPass;
     private final ResultSynthesizer resultSynthesizer;
     private final IssueDuplicationDetector duplicationDetector;
+    private final BlastRadiusConsolidator blastRadiusConsolidator;
+    private final IssuePrioritizer issuePrioritizer;
     private final MultiModelLLMRouter llmRouter;
     private final IssueRepository issueRepository;
     private final GitHubService gitHubService;
@@ -125,21 +130,32 @@ public class MultiPassReviewOrchestrator {
             result.setImpactResult(impactResult);
 
             // ============================================
-            // SÍNTESE FINAL
+            // CONSOLIDAÇÃO (Blast-Radius v2)
+            // ============================================
+            // Promove a severity de issues SAST/LLM/Security cujo arquivo cai
+            // no blast radius do PR (impacto downstream detectado pelo Pass 4).
+            BlastRadiusResult blast = extractBlastRadius(impactResult);
+            List<Issue> allIssues = result.collectAllIssues();
+            int promoted = blastRadiusConsolidator.consolidate(allIssues, blast);
+            if (promoted > 0) {
+                log.debug("Consolidator promoted {} issue(s) by blast radius", promoted);
+            }
+
+            // ============================================
+            // DEDUP + PRIORITIZAÇÃO + SÍNTESE FINAL
             // ============================================
             log.debug("Synthesizing results");
-            List<Issue> allIssues = result.collectAllIssues();
 
-            // Deduplicação
             List<Issue> deduplicatedIssues = duplicationDetector.deduplicate(allIssues);
-            result.setDeduplicatedIssues(deduplicatedIssues);
+            List<Issue> prioritized = issuePrioritizer.prioritize(deduplicatedIssues, blast);
+            result.setDeduplicatedIssues(prioritized);
 
             // Geração de executive summary
-            String executiveSummary = generateExecutiveSummary(review, deduplicatedIssues, result);
+            String executiveSummary = generateExecutiveSummary(review, prioritized, result);
             result.setExecutiveSummary(executiveSummary);
 
             // Salvar issues no banco
-            List<Issue> savedIssues = issueRepository.saveAll(deduplicatedIssues);
+            List<Issue> savedIssues = issueRepository.saveAll(prioritized);
             result.setSavedIssues(savedIssues);
 
             // Atualizar review
@@ -257,6 +273,18 @@ public class MultiPassReviewOrchestrator {
      */
     private String generateExecutiveSummary(Review review, List<Issue> issues, ReviewResult result) {
         return resultSynthesizer.generateSummary(review, issues, result);
+    }
+
+    /**
+     * Recupera o {@link BlastRadiusResult} produzido pelo Pass 4 (CodeGraphImpactPass),
+     * armazenado no metadata da PassResult sob a chave
+     * {@link CodeGraphImpactPass#METADATA_BLAST_RADIUS}. Pode retornar null se a
+     * passada falhou ou não populou o blast.
+     */
+    private BlastRadiusResult extractBlastRadius(PassResult impactResult) {
+        if (impactResult == null || impactResult.getMetadata() == null) return null;
+        Object raw = impactResult.getMetadata().get(CodeGraphImpactPass.METADATA_BLAST_RADIUS);
+        return raw instanceof BlastRadiusResult br ? br : null;
     }
 
     /**

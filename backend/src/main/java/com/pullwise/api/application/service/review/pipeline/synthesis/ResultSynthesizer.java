@@ -1,8 +1,12 @@
 package com.pullwise.api.application.service.review.pipeline.synthesis;
 
+import com.pullwise.api.application.service.graph.blast.BlastRadiusResult;
+import com.pullwise.api.application.service.graph.blast.ImpactedNode;
+import com.pullwise.api.application.service.review.pipeline.pass.CodeGraphImpactPass;
 import com.pullwise.api.domain.model.Issue;
 import com.pullwise.api.domain.model.Review;
 import com.pullwise.api.domain.enums.Severity;
+import com.pullwise.api.application.service.review.pipeline.MultiPassReviewOrchestrator.PassResult;
 import com.pullwise.api.application.service.review.pipeline.MultiPassReviewOrchestrator.ReviewResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -83,6 +87,9 @@ public class ResultSynthesizer {
             }
         }
 
+        // Bloco Blast Radius (Code Graph v2)
+        appendBlastRadiusSection(summary, result);
+
         // Resumo por passada
         summary.append("### Analysis Passes\n\n");
         if (result.getSastResult() != null) {
@@ -139,6 +146,42 @@ public class ResultSynthesizer {
         }
 
         return recs.toString();
+    }
+
+    /**
+     * Adiciona o bloco "Blast Radius" ao summary se o Pass 4 produziu resultado.
+     * Lista até 5 nós impactados ordenados por riskScore.
+     */
+    private void appendBlastRadiusSection(StringBuilder summary, ReviewResult result) {
+        BlastRadiusResult blast = extractBlastRadius(result.getImpactResult());
+        if (blast == null || blast.impactedNodes().isEmpty()) return;
+
+        summary.append("### 🎯 Blast Radius\n\n");
+        summary.append(String.format("- **Seeds**: %d\n", blast.seedCount()));
+        summary.append(String.format("- **Impacted nodes**: %d\n", blast.impactedNodes().size()));
+        summary.append(String.format("- **Impacted files**: %d\n", blast.impactedFiles().size()));
+        if (blast.truncated()) {
+            summary.append("- _Result truncated; consider narrowing the change_\n");
+        }
+        summary.append("\n**Top impacted symbols**:\n");
+
+        int limit = Math.min(5, blast.impactedNodes().size());
+        for (int i = 0; i < limit; i++) {
+            ImpactedNode node = blast.impactedNodes().get(i);
+            summary.append(String.format("- `%s` (depth=%d, risk=%.2f)",
+                    node.qualifiedName(), node.depth(), node.riskScore()));
+            if (node.filePath() != null) {
+                summary.append(" — ").append(getShortPath(node.filePath()));
+            }
+            summary.append("\n");
+        }
+        summary.append("\n");
+    }
+
+    private BlastRadiusResult extractBlastRadius(PassResult impactResult) {
+        if (impactResult == null || impactResult.getMetadata() == null) return null;
+        Object raw = impactResult.getMetadata().get(CodeGraphImpactPass.METADATA_BLAST_RADIUS);
+        return raw instanceof BlastRadiusResult br ? br : null;
     }
 
     /**

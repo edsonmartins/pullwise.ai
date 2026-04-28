@@ -1,223 +1,185 @@
 package com.pullwise.api.application.service.review.pipeline.pass;
 
-import com.pullwise.api.application.service.graph.CodeGraphService;
+import com.pullwise.api.application.service.graph.blast.BlastRadiusOptions;
+import com.pullwise.api.application.service.graph.blast.BlastRadiusResult;
+import com.pullwise.api.application.service.graph.blast.BlastRadiusService;
+import com.pullwise.api.application.service.graph.blast.ImpactedNode;
 import com.pullwise.api.application.service.integration.GitHubService;
-import com.pullwise.api.application.service.llm.router.MultiModelLLMRouter;
+import com.pullwise.api.application.service.review.pipeline.MultiPassReviewOrchestrator.PassResult;
+import com.pullwise.api.domain.enums.IssueSource;
+import com.pullwise.api.domain.enums.IssueType;
+import com.pullwise.api.domain.enums.Severity;
 import com.pullwise.api.domain.model.Issue;
 import com.pullwise.api.domain.model.PullRequest;
 import com.pullwise.api.domain.model.Review;
-import com.pullwise.api.domain.enums.*;
-import com.pullwise.api.application.service.review.pipeline.MultiPassReviewOrchestrator.PassResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDateTime;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
- * Passada 4: Code Graph Impact Analysis
+ * Passada 4: Code Graph Impact Analysis (Blast-Radius v2).
  *
- * <p>Analisa o impacto das mudanças através de:
- * - Call graphs (quais funções chamam quais)
- * - Dependency graphs (dependências entre módulos)
- * - Blast radius (impacto potencial da mudança)
- * - Risk score (baseado em criticidade dos afetados)
+ * <p>Calcula o blast-radius do PR via {@link BlastRadiusService} (BFS forward
+ * em CALLS / IMPORTS_FROM / INHERITS, com confidence tiers e risk scoring).
+ * Gera um issue agregado por arquivo alterado quando há nós atingidos com
+ * risk >= {@link #IMPACT_ISSUE_THRESHOLD}.
  *
- * <p>Esta passada identifica problemas que afetam outros arquivos/componentes
- * que não foram diretamente modificados no PR.
+ * <p>O {@link BlastRadiusResult} é exposto em {@code PassResult.metadata.blastRadius}
+ * para a fase de Consolidation usar (promoção de severidade de issues SAST/LLM
+ * cujo arquivo cai no blast radius).
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class CodeGraphImpactPass {
 
-    private final CodeGraphService codeGraphService;
-    private final MultiModelLLMRouter llmRouter;
+    /** riskScore mínimo para criar issue dedicado de impacto. */
+    public static final double IMPACT_ISSUE_THRESHOLD = 0.55;
 
-    /**
-     * Executa a análise de impacto no grafo de código.
-     *
-     * @param pullRequest  O PR a ser analisado
-     * @param review       O review associado
-     * @param sastResult   Resultados do SAST
-     * @param llmResult    Resultados da análise LLM primária
-     * @return PassResult com issues de impacto
-     */
+    /** Quantos top nodes incluir no description do issue. */
+    private static final int TOP_N_IN_DESCRIPTION = 5;
+
+    public static final String METADATA_BLAST_RADIUS = "blastRadius";
+
+    private final BlastRadiusService blastRadiusService;
+
     public PassResult execute(PullRequest pullRequest, Review review,
-                             PassResult sastResult, PassResult llmResult,
-                             List<GitHubService.FileDiff> diffs) {
+                              PassResult sastResult, PassResult llmResult,
+                              List<GitHubService.FileDiff> diffs) {
         long startTime = System.currentTimeMillis();
 
         String repoIdentifier = pullRequest.getProject() != null
                 ? pullRequest.getProject().getName()
                 : "unknown";
-        log.debug("Starting Code Graph Impact analysis for PR {}/{}", repoIdentifier, pullRequest.getPrNumber());
-
-        List<Issue> issues = new ArrayList<>();
-
-        try {
-            // Analisar impacto no grafo de código
-            List<ImpactAnalysis> impacts = analyzeImpact(pullRequest, review, diffs);
-
-            // Gerar issues baseados em alto impacto
-            for (ImpactAnalysis impact : impacts) {
-                if (impact.getRiskScore() >= 7) {  // Alto risco
-                    Issue issue = createImpactIssue(impact, review);
-                    issues.add(issue);
-                }
-            }
-
-            log.debug("Impact pass completed: {} high-impact issues found", issues.size());
-
-        } catch (Exception e) {
-            log.warn("Impact analysis encountered errors", e);
-        }
+        log.debug("Starting Code Graph Impact analysis for PR {}/{}",
+                repoIdentifier, pullRequest.getPrNumber());
 
         PassResult result = new PassResult();
         result.setPassName("Code Graph Impact Analysis");
         result.setSuccess(true);
-        result.setIssues(issues);
-        result.setDurationMs(System.currentTimeMillis() - startTime);
+        result.setIssues(new ArrayList<>());
 
-        // Metadata
         Map<String, Object> metadata = new HashMap<>();
-        metadata.put("filesAnalyzed", diffs.size());
         result.setMetadata(metadata);
 
+        if (pullRequest.getProject() == null || pullRequest.getProject().getId() == null) {
+            log.debug("PR has no project; skipping impact analysis");
+            result.setDurationMs(System.currentTimeMillis() - startTime);
+            return result;
+        }
+
+        Long projectId = pullRequest.getProject().getId();
+        List<String> changedFiles = diffs.stream()
+                .map(GitHubService.FileDiff::filename)
+                .filter(s -> s != null && !s.isBlank())
+                .toList();
+
+        if (changedFiles.isEmpty()) {
+            result.setDurationMs(System.currentTimeMillis() - startTime);
+            return result;
+        }
+
+        try {
+            BlastRadiusResult blast = blastRadiusService.computeBlastRadius(
+                    projectId, changedFiles, BlastRadiusOptions.defaults());
+
+            metadata.put(METADATA_BLAST_RADIUS, blast);
+            metadata.put("filesAnalyzed", changedFiles.size());
+            metadata.put("seedCount", blast.seedCount());
+            metadata.put("impactedNodes", blast.impactedNodes().size());
+            metadata.put("impactedFiles", blast.impactedFiles().size());
+            metadata.put("truncated", blast.truncated());
+
+            List<ImpactedNode> highRisk = blast.impactedNodes().stream()
+                    .filter(n -> n.riskScore() >= IMPACT_ISSUE_THRESHOLD)
+                    .toList();
+
+            if (!highRisk.isEmpty()) {
+                Issue issue = createAggregatedIssue(blast, highRisk, review, changedFiles);
+                result.getIssues().add(issue);
+            }
+
+            log.debug("Impact pass completed: {} impacted nodes, {} high-risk, {} files",
+                    blast.impactedNodes().size(), highRisk.size(), blast.impactedFiles().size());
+
+        } catch (Exception e) {
+            log.warn("Impact analysis failed: {}", e.getMessage(), e);
+        }
+
+        result.setDurationMs(System.currentTimeMillis() - startTime);
         return result;
     }
 
-    /**
-     * Analisa o impacto das mudanças no grafo de código.
-     */
-    private List<ImpactAnalysis> analyzeImpact(PullRequest pullRequest, Review review,
-                                               List<GitHubService.FileDiff> diffs) {
-        List<ImpactAnalysis> impacts = new ArrayList<>();
+    private Issue createAggregatedIssue(BlastRadiusResult blast, List<ImpactedNode> highRisk,
+                                        Review review, List<String> changedFiles) {
+        ImpactedNode top = highRisk.get(0);
+        Severity severity = severityFromRiskScore(top.riskScore());
 
-        try {
-            // Extrair arquivos alterados dos diffs
-            List<String> changedFiles = diffs.stream()
-                    .map(GitHubService.FileDiff::filename)
-                    .toList();
-
-            String repoIdentifier = pullRequest.getProject() != null
-                    ? pullRequest.getProject().getName()
-                    : "unknown";
-
-            for (String filePath : changedFiles) {
-                // Calcular blast radius
-                int blastRadius = codeGraphService.calculateBlastRadius(
-                        repoIdentifier,
-                        filePath
-                );
-
-                if (blastRadius > 0) {
-                    ImpactAnalysis impact = ImpactAnalysis.builder()
-                            .filePath(filePath)
-                            .blastRadius(blastRadius)
-                            .riskScore(calculateRiskScore(blastRadius, filePath))
-                            .affectedFiles(codeGraphService.getAffectedFiles(
-                                    repoIdentifier,
-                                    filePath
-                            ))
-                            .build();
-
-                    impacts.add(impact);
-                }
-            }
-
-        } catch (Exception e) {
-            log.warn("Failed to analyze code graph impact: {}", e.getMessage());
+        // Se o top tem confidence baixa (caminho dominado por arestas AMBIGUOUS),
+        // rebaixa um nível para evitar ruído de cross-language/late binding.
+        if (top.propagatedConfidence() < 0.5 && severity == Severity.CRITICAL) {
+            severity = Severity.HIGH;
         }
 
-        return impacts;
-    }
-
-    /**
-     * Calcula score de risco baseado no blast radius e criticidade do arquivo.
-     */
-    private int calculateRiskScore(int blastRadius, String filePath) {
-        int baseScore = Math.min(10, blastRadius / 5);  // 0-10 baseado no blast radius
-
-        // Arquivo crítico?
-        if (isCriticalFile(filePath)) {
-            baseScore = Math.min(10, baseScore + 3);
-        }
-
-        return baseScore;
-    }
-
-    /**
-     * Verifica se o arquivo é crítico.
-     */
-    private boolean isCriticalFile(String filePath) {
-        String lower = filePath.toLowerCase();
-        return lower.contains("auth") || lower.contains("security") ||
-                lower.contains("payment") || lower.contains("config") ||
-                lower.contains("controller") && lower.contains("base");
-    }
-
-    /**
-     * Cria um issue baseado em análise de impacto.
-     */
-    private Issue createImpactIssue(ImpactAnalysis impact, Review review) {
-        Severity severity = switch (impact.getRiskScore()) {
-            case 9, 10 -> Severity.CRITICAL;
-            case 7, 8 -> Severity.HIGH;
-            case 5, 6 -> Severity.MEDIUM;
-            default -> Severity.LOW;
-        };
+        String anchorFile = changedFiles.get(0);
 
         return Issue.builder()
                 .review(review)
                 .type(IssueType.CODE_SMELL)
                 .severity(severity)
-                .title("High-impact change detected")
-                .description(buildImpactDescription(impact))
-                .filePath(impact.getFilePath())
+                .title(buildTitle(blast, highRisk))
+                .description(buildDescription(blast, highRisk))
+                .filePath(anchorFile)
                 .lineStart(1)
                 .lineEnd(1)
-                .ruleId("CODE_GRAPH_IMPACT")
+                .ruleId("CODE_GRAPH_IMPACT_V2")
                 .source(IssueSource.LLM)
                 .build();
     }
 
-    /**
-     * Constrói descrição do impacto.
-     */
-    private String buildImpactDescription(ImpactAnalysis impact) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("This change affects approximately **").append(impact.getBlastRadius())
-                .append("** other files/components.\n\n");
-
-        if (impact.getAffectedFiles() != null && !impact.getAffectedFiles().isEmpty()) {
-            sb.append("**Affected files**:\n");
-            impact.getAffectedFiles().stream()
-                    .limit(10)  // Limita a 10 arquivos
-                    .forEach(f -> sb.append("- ").append(f).append("\n"));
-
-            if (impact.getAffectedFiles().size() > 10) {
-                sb.append("- ... and ").append(impact.getAffectedFiles().size() - 10).append(" more\n");
-            }
-        }
-
-        sb.append("\n**Risk Score**: ").append(impact.getRiskScore()).append("/10");
-
-        return sb.toString();
+    private static Severity severityFromRiskScore(double riskScore) {
+        if (riskScore >= 0.75) return Severity.CRITICAL;
+        if (riskScore >= 0.55) return Severity.HIGH;
+        if (riskScore >= 0.35) return Severity.MEDIUM;
+        return Severity.LOW;
     }
 
-    // ========== DTOs ==========
+    private String buildTitle(BlastRadiusResult blast, List<ImpactedNode> highRisk) {
+        return String.format("Blast radius: %d high-risk impact%s across %d file%s",
+                highRisk.size(), highRisk.size() == 1 ? "" : "s",
+                blast.impactedFiles().size(), blast.impactedFiles().size() == 1 ? "" : "s");
+    }
 
-    /**
-     * Resultado da análise de impacto.
-     */
-    @lombok.Data
-    @lombok.Builder
-    public static class ImpactAnalysis {
-        private String filePath;
-        private int blastRadius;  // Número de arquivos afetados
-        private int riskScore;     // 0-10
-        private List<String> affectedFiles;
+    private String buildDescription(BlastRadiusResult blast, List<ImpactedNode> highRisk) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("This change has potential downstream impact:\n\n");
+        sb.append("- **Seeds analysed**: ").append(blast.seedCount()).append("\n");
+        sb.append("- **Nodes reached**: ").append(blast.impactedNodes().size()).append("\n");
+        sb.append("- **Files affected**: ").append(blast.impactedFiles().size()).append("\n");
+        if (blast.truncated()) {
+            sb.append("- _Result was truncated; consider narrowing the change_\n");
+        }
+        sb.append("\n**Top high-risk impacted symbols**:\n");
+
+        int limit = Math.min(TOP_N_IN_DESCRIPTION, highRisk.size());
+        for (int i = 0; i < limit; i++) {
+            ImpactedNode node = highRisk.get(i);
+            sb.append(String.format("- `%s` (depth=%d, risk=%.2f, confidence=%.2f)",
+                    node.qualifiedName(), node.depth(),
+                    node.riskScore(), node.propagatedConfidence()));
+            if (node.filePath() != null) {
+                sb.append(" — ").append(node.filePath());
+            }
+            sb.append("\n");
+        }
+        if (highRisk.size() > limit) {
+            sb.append("- … and ").append(highRisk.size() - limit).append(" more\n");
+        }
+        return sb.toString();
     }
 }
