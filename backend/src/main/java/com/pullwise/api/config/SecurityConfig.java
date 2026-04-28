@@ -27,6 +27,7 @@ import java.util.List;
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
+@org.springframework.context.annotation.Profile("!test")
 @RequiredArgsConstructor
 public class SecurityConfig {
 
