@@ -5,6 +5,9 @@ import com.pullwise.api.application.dto.response.*;
 import com.pullwise.api.application.service.attestation.AttestationService;
 import com.pullwise.api.application.service.audit.Auditable;
 import com.pullwise.api.application.service.auth.AuthorizationService;
+import com.pullwise.api.application.service.graph.blast.BlastRadiusOptions;
+import com.pullwise.api.application.service.graph.blast.BlastRadiusResult;
+import com.pullwise.api.application.service.graph.blast.BlastRadiusService;
 import com.pullwise.api.application.service.review.CoverageTrackingService;
 import com.pullwise.api.application.service.review.ReviewOrchestrator;
 import com.pullwise.api.domain.enums.Severity;
@@ -41,6 +44,7 @@ public class ReviewController {
     private final CoverageTrackingService coverageTrackingService;
     private final AttestationService attestationService;
     private final AuthorizationService authorizationService;
+    private final BlastRadiusService blastRadiusService;
 
     /**
      * Lista reviews de um projeto.
@@ -233,5 +237,33 @@ public class ReviewController {
     @PostMapping("/{id}/attestation/verify")
     public ResponseEntity<AttestationService.VerificationResult> verifyAttestation(@PathVariable Long id) {
         return ResponseEntity.ok(attestationService.verify(id));
+    }
+
+    /**
+     * Retorna o blast-radius do review: calcula impacto downstream a partir
+     * dos arquivos das issues do review (proxy de changed files).
+     */
+    @GetMapping("/{id}/blast-radius")
+    public ResponseEntity<BlastRadiusResult> getBlastRadius(@PathVariable Long id, Principal principal) {
+        Review review = reviewRepository.findById(id).orElse(null);
+        if (review == null) return ResponseEntity.notFound().build();
+
+        Long projectId = review.getPullRequest() != null && review.getPullRequest().getProject() != null
+                ? review.getPullRequest().getProject().getId()
+                : null;
+        if (projectId == null) return ResponseEntity.notFound().build();
+
+        Long userId = authorizationService.getUserId(principal);
+        authorizationService.requireProjectAccess(userId, projectId);
+
+        List<String> changedFiles = issueRepository.findByReviewId(id).stream()
+                .map(Issue::getFilePath)
+                .filter(p -> p != null && !p.isBlank())
+                .distinct()
+                .toList();
+
+        BlastRadiusResult result = blastRadiusService.computeBlastRadius(
+                projectId, changedFiles, BlastRadiusOptions.defaults());
+        return ResponseEntity.ok(result);
     }
 }

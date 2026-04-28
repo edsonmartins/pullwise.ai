@@ -28,6 +28,7 @@ import {
 } from '@tabler/icons-react'
 import { format, formatDistanceToNow } from 'date-fns'
 import { reviewsApi } from '@/lib/api'
+import { BlastRadiusCard } from '@/components/review/BlastRadiusCard'
 
 interface Review {
   id: number
@@ -355,6 +356,9 @@ export default function ReviewDetailPage() {
           </Progress.Root>
         </Card>
       )}
+
+      {/* Blast Radius (Code Graph v2) */}
+      <BlastRadiusCard reviewId={review.id} />
 
       <Divider />
 

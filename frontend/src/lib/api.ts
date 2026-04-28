@@ -328,4 +328,66 @@ export const reviewsApi = {
   async markFalsePositive(issueId: number): Promise<void> {
     await api.post(`/reviews/issues/${issueId}/false-positive`)
   },
+
+  async getBlastRadius(id: number): Promise<BlastRadiusResult> {
+    const response = await api.get<BlastRadiusResult>(`/reviews/${id}/blast-radius`)
+    return response.data
+  },
+}
+
+// ============================================================
+// Blast-Radius v2 (Code Graph)
+// ============================================================
+export interface ImpactedNode {
+  qualifiedName: string
+  filePath: string | null
+  depth: number
+  propagatedConfidence: number
+  riskScore: number
+  riskBreakdown: Record<string, number>
+}
+
+export interface BlastRadiusResult {
+  impactedNodes: ImpactedNode[]
+  impactedFiles: string[]
+  truncated: boolean
+  seedCount: number
+}
+
+export interface CodeGraphStats {
+  projectId: number
+  nodeCount: number
+  edgeCount: number
+}
+
+export const blastRadiusApi = {
+  async compute(projectId: number, changedFiles: string[], options?: {
+    maxDepth?: number
+    maxNodes?: number
+    kinds?: string[]
+  }): Promise<BlastRadiusResult> {
+    const response = await api.post<BlastRadiusResult>(
+      `/projects/${projectId}/blast-radius`,
+      { changedFiles, ...options }
+    )
+    return response.data
+  },
+
+  async getStats(projectId: number): Promise<CodeGraphStats> {
+    const response = await api.get<CodeGraphStats>(`/projects/${projectId}/code-graph/stats`)
+    return response.data
+  },
+
+  async recomputeHotspots(projectId: number, lookbackDays = 90): Promise<{
+    filesUpdated: number
+    nodesAffected: number
+    maxIssuesPerFile: number
+  }> {
+    const response = await api.post(
+      `/projects/${projectId}/code-graph/hotspots/recompute`,
+      null,
+      { params: { lookbackDays } }
+    )
+    return response.data
+  },
 }

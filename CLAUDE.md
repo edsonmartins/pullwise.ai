@@ -52,13 +52,14 @@ Layered architecture with four top-level packages:
 
 Key subsystems in `application/service/`:
 
-- **`review/pipeline/`** — 4-pass code review pipeline: SAST Analysis → LLM Review → Consolidation → Prioritization
+- **`review/pipeline/`** — 4-pass code review pipeline: SAST Analysis → LLM Review → Security Focus → Code Graph Impact, followed by Consolidation (Blast-Radius severity promotion) → Dedup → Prioritization → Synthesis
 - **`llm/router/MultiModelLLMRouter`** — Routes reviews to optimal LLM based on language, complexity, cost, and user tier. Supports OpenRouter (cloud) and Ollama (local)
 - **`plugin/`** — SPI-based plugin system with dynamic loading and sandboxed execution
-- **`graph/`** — Code dependency analysis using JGraphT
+- **`graph/`** — Code dependency analysis (JGraphT for legacy in-memory; persistent Code Graph v2 in PostgreSQL via `code_graph_nodes`/`code_graph_edges`)
+- **`graph/blast/`** — **Blast-Radius v2**: forward BFS via Postgres CTE recursiva, confidence tiers (`EXTRACTED`/`INFERRED`/`AMBIGUOUS`) e risk scoring (depth, hotspot, security keywords, test gap × propagated confidence). Cache Redis (`blast-radius`, TTL 10 min) e métricas Micrometer (`pullwise.blast_radius.*`). Endpoints em `/api/projects/{id}/blast-radius`, `/code-graph/stats`, `/code-graph/hotspots/recompute`.
 - **`autofix/`** — Auto-fix generation and application via Git
 
-Database: PostgreSQL 16 with pgvector (for RAG embeddings). Migrations via Flyway in `src/main/resources/db/migration/` (V1-V4). Hibernate DDL set to `validate` — all schema changes must go through Flyway migrations.
+Database: PostgreSQL 16 with pgvector (for RAG embeddings). Migrations via Flyway in `src/main/resources/db/migration/` (V1-V9). V9 introduced `code_graph_nodes` and `code_graph_edges` for the Blast-Radius v2 feature. Hibernate DDL set to `validate` — all schema changes must go through Flyway migrations.
 
 Messaging: RabbitMQ for async job processing; WebSocket (STOMP) for real-time updates to frontend.
 
