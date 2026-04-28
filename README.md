@@ -7,8 +7,8 @@
   **A Plataforma Open Source de Code Review**
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
-  [![CI/CD](https://github.com/integralltech/pullwise-ai/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/integralltech/pullwise-ai/actions)
-  [![GitHub Stars](https://img.shields.io/github/stars/integralltech/pullwise-ai?style=social)](https://github.com/integralltech/pullwise-ai)
+  [![CI/CD](https://github.com/edsonmartins/pullwise.ai/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/edsonmartins/pullwise.ai/actions)
+  [![GitHub Stars](https://img.shields.io/github/stars/edsonmartins/pullwise.ai?style=social)](https://github.com/edsonmartins/pullwise.ai)
 
   [Website](https://pullwise.ai) • [Docs](https://docs.pullwise.ai) • [Demo](https://pullwise.ai/demo) • [Discord](https://discord.gg/pullwise)
 
@@ -50,8 +50,8 @@ Code reviews são essenciais para a qualidade do software, mas são:
 
 ```bash
 # Clone o repositório
-git clone https://github.com/integralltech/pullwise-ai.git
-cd pullwise-ai
+git clone https://github.com/edsonmartins/pullwise.ai.git
+cd pullwise.ai
 
 # Inicie todos os serviços
 docker-compose up -d
@@ -75,7 +75,7 @@ docker-compose --profile monitoring up -d
 ### Requisitos do Sistema
 
 - **Docker** 20.10+ e Docker Compose 2.0+
-- **4 GB RAM** mínimo (8 GB recomendado com monitoramento)
+- **8 GB RAM** mínimo (16 GB recomendado com monitoramento)
 - **10 GB** de espaço em disco
 - **Linux**, **macOS** ou **Windows** com WSL2
 
@@ -97,25 +97,33 @@ docker-compose --profile monitoring up -d
 
 ## Funcionalidades Principais
 
-### Reviews Híbridos SAST + IA
+### Pipeline 4-Pass de Review
 
-O Pullwise combina análise estática com IA em um pipeline multi-pass:
+O Pullwise combina análise estática com IA em um pipeline de quatro passadas, seguidas de quatro estágios de síntese:
 
-1. **Análise Estática** (execução paralela):
-   - SonarQube (bugs, vulnerabilidades, code smells)
-   - ESLint (JavaScript/TypeScript)
-   - Checkstyle, PMD, SpotBugs (Java)
+1. **Pass 1 — SAST Aggregation** (paralelo): SonarQube, ESLint, Checkstyle, PMD, SpotBugs
+2. **Pass 2 — LLM Primary**: análise de lógica de negócio com SAST como baseline e RAG (pgvector)
+3. **Pass 3 — Security Focus**: revisão profunda focada em vulnerabilidades
+4. **Pass 4 — Code Graph Impact**: blast-radius BFS no grafo de dependências persistido em Postgres
 
-2. **Review com IA** (com contexto completo):
-   - Resultados SAST como baseline
-   - Análise de grafo de código (dependency-aware)
-   - RAG com base de conhecimento do projeto (pgvector)
-   - Instruções customizadas do time
+**Síntese**:
+- **Consolidation**: severidade promovida para issues cujo arquivo cai no blast radius
+- **Dedup**: issues similares mesclados
+- **Prioritization**: ordenação por `severity × 0.6 + risk × 0.4`
+- **Summary**: resumo executivo em markdown com top issues e impactos
 
-3. **Consolidação Inteligente**:
-   - Deduplicação de issues similares
-   - Priorização por severidade e risco
-   - Formatação de comentários inline acionáveis
+### Blast-Radius v2 (Code Graph)
+
+Análise de impacto downstream para PRs, baseada em grafo de dependências persistido em PostgreSQL (não in-memory):
+
+- **BFS forward** via CTE recursiva sobre arestas `CALLS`, `IMPORTS_FROM`, `INHERITS` — escala em monorepos sem carregar o grafo inteiro.
+- **Confidence tiers** em cada aresta: `EXTRACTED` (1.0, AST direto), `INFERRED` (0.7, simple-name resolvido), `AMBIGUOUS` (0.4, cross-language ou late binding). Confidence é multiplicada ao longo do caminho, atenuando falsos positivos.
+- **Risk scoring** por nó: `depth_inverse × 0.30 + hotspot × 0.25 + security_keywords × 0.25 + test_gap × 0.20`, multiplicado pela propagated confidence.
+- **Hotspots** computados a partir de churn/issues por arquivo (job batch, normalização log).
+- **Cache Redis** (TTL 10 min) com chave SHA-256 sobre `(projectId, sorted files, depth, kinds)`.
+- **Métricas Micrometer**: `pullwise.blast_radius.duration{cache=hit|miss}`, `nodes_visited`, `truncated`.
+- **Endpoints**: `POST /api/projects/{id}/blast-radius`, `GET /api/reviews/{id}/blast-radius`, `GET /api/projects/{id}/code-graph/stats`, `POST /api/projects/{id}/code-graph/hotspots/recompute`.
+- **UI**: card "Blast Radius" no review detail com top-5 nós atingidos e badges de risco.
 
 ### Roteador Multi-Modelo LLM
 
@@ -149,6 +157,8 @@ Extensível via arquitetura SPI:
 
 ### CLI
 
+Instala dois binários: `pullwise` (nome completo) e `pw` (alias curto), equivalentes.
+
 ```bash
 npm install -g @pullwise/cli
 
@@ -177,10 +187,12 @@ O Pullwise segue um **modelo open-core**:
 | **Licença** | MIT | Proprietária | Proprietária |
 | **Usuários** | 5 | 50 | Ilimitado |
 | **Organizações** | 1 | 3 | Ilimitado |
-| **Pipeline de Review** | 2-pass | 4-pass | 4-pass |
-| **Code Graph** | -- | Sim | Sim |
+| **Pipeline 4-pass** | Sim | Sim | Sim |
+| **Blast-Radius v2 (Code Graph)** | Sim | Sim | Sim |
+| **Auto-Fix com IA** | Sim | Sim | Sim |
 | **SSO/SAML** | -- | Sim | Sim |
 | **Logs de Auditoria** | -- | 30 dias | 1 ano |
+| **Multi-tenancy avançado** | -- | -- | Sim |
 | **SLA** | Comunidade | 48h | 4h |
 
 ---
@@ -215,6 +227,23 @@ npm run dev                  # Modo dev com watch
 npm run build                # Build para distribuição
 ```
 
+### Testes
+
+```bash
+# Backend — JUnit 5 + Mockito + Testcontainers (requer Docker rodando)
+cd backend
+mvn test                                          # Suíte completa
+mvn test -Dtest=BlastRadiusIntegrationTest        # Integração Postgres real
+mvn test -Dtest=BlastRadiusControllerE2ETest      # E2E HTTP
+
+# Frontend — Playwright (smoke tests)
+cd frontend
+npm run test:e2e:install     # Instalar Chromium (uma vez, ~150 MB)
+npm run test:e2e             # Sobe Vite dev server e roda specs
+```
+
+A feature Blast-Radius v2 tem **67 testes Java** (unit + integração com Postgres real via Testcontainers + E2E HTTP) e **2 testes Playwright** validando o card no review detail.
+
 ---
 
 ## Deploy
@@ -247,7 +276,7 @@ Contribuições são bem-vindas! Áreas prioritárias:
 - Melhorias na documentação
 - Reports de bugs e testes
 
-Veja as [Good First Issues](https://github.com/integralltech/pullwise-ai/issues?q=label%3A%22good+first+issue%22+is%3Aopen+is%3Aissue) para começar.
+Veja as [Good First Issues](https://github.com/edsonmartins/pullwise.ai/issues?q=label%3A%22good+first+issue%22+is%3Aopen+is%3Aissue) para começar.
 
 ---
 
