@@ -64,6 +64,10 @@ security:
       client-id: ${GITHUB_CLIENT_ID}
       client-secret: ${GITHUB_CLIENT_SECRET}
 
+# Stateless conformance endpoint (service-to-service shared key; blank = open in dev)
+conformance:
+  api-key: ${PULLWISE_CONFORMANCE_API_KEY:}
+
 # Integrations
 integrations:
   github:
