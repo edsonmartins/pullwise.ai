@@ -49,6 +49,7 @@ public class SecurityConfig {
                                 "/api/demo-requests",
                                 "/api/billing/webhook/**",
                                 "/webhooks/**",
+                                "/api/conformance/**",
                                 "/actuator/health",
                                 "/error"
                         ).permitAll()
