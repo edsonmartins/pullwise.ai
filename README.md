@@ -99,18 +99,22 @@ docker-compose --profile monitoring up -d
 
 ### Pipeline 4-Pass de Review
 
-O Pullwise combina análise estática com IA em um pipeline de quatro passadas, seguidas de quatro estágios de síntese:
+O Pullwise combina análise estática com IA em um pipeline de quatro passadas, seguidas dos estágios de síntese:
 
 1. **Pass 1 — SAST Aggregation** (paralelo): SonarQube, ESLint, Checkstyle, PMD, SpotBugs
-2. **Pass 2 — LLM Primary**: análise de lógica de negócio com SAST como baseline e RAG (pgvector)
+2. **Pass 2 — LLM Primary**: análise de lógica de negócio com SAST como baseline e RAG (pgvector). Inclui **rule matching** (checklist determinístico por tipo de arquivo, resolvido por glob) e uma **plan phase** opcional que, para arquivos grandes, gera um mapa de risco para focar a análise
 3. **Pass 3 — Security Focus**: revisão profunda focada em vulnerabilidades
 4. **Pass 4 — Code Graph Impact**: blast-radius BFS no grafo de dependências persistido em Postgres
 
 **Síntese**:
 - **Consolidation**: severidade promovida para issues cujo arquivo cai no blast radius
+- **Comment Positioning**: corrige o número de linha dos achados de LLM casando o trecho de código contra o diff (elimina *line drift*)
 - **Dedup**: issues similares mesclados
 - **Prioritization**: ordenação por `severity × 0.6 + risk × 0.4`
+- **Reflection Filter**: remove achados de LLM que o diff prova errados (anti falso-positivo)
 - **Summary**: resumo executivo em markdown com top issues e impactos
+
+> As etapas de Comment Positioning, Reflection Filter, rule matching e plan phase são inspiradas no [Open Code Review](https://github.com/alibaba/open-code-review) (Alibaba) e configuráveis por projeto (toggles `review.position_correction`, `review.reflection_enabled`, `review.rule_guidance_enabled`, `review.plan_phase_enabled`).
 
 ### Blast-Radius v2 (Code Graph)
 
@@ -188,6 +192,7 @@ O Pullwise segue um **modelo open-core**:
 | **Usuários** | 5 | 50 | Ilimitado |
 | **Organizações** | 1 | 3 | Ilimitado |
 | **Pipeline 4-pass** | Sim | Sim | Sim |
+| **Confiabilidade do review (positioning + reflection)** | Sim | Sim | Sim |
 | **Blast-Radius v2 (Code Graph)** | Sim | Sim | Sim |
 | **Auto-Fix com IA** | Sim | Sim | Sim |
 | **SSO/SAML** | -- | Sim | Sim |
