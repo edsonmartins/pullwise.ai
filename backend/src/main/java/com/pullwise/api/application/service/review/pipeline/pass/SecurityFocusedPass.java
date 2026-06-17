@@ -1,5 +1,6 @@
 package com.pullwise.api.application.service.review.pipeline.pass;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pullwise.api.application.service.config.ConfigurationResolver;
 import com.pullwise.api.application.service.integration.GitHubService;
@@ -192,6 +193,7 @@ public class SecurityFocusedPass {
                   "severity": "CRITICAL|HIGH|MEDIUM|LOW",
                   "owasp": "A03:2021-Injection",
                   "line": 123,
+                  "existing_code": "the exact vulnerable line(s) copied VERBATIM from the diff (without the leading +/- markers)",
                   "recommendation": "Specific code fix with example"
                 }
               ]
@@ -201,6 +203,8 @@ public class SecurityFocusedPass {
             Important:
             - Only report vulnerabilities you can demonstrate with a concrete attack scenario
             - CRITICAL severity requires clear evidence of exploitability
+            - ALWAYS fill "existing_code" with the vulnerable line(s) copied verbatim
+              from the diff (no +/- markers). It is used to locate the finding precisely.
             - Include the reasoning chain to help developers understand the risk
             """;
     }
@@ -279,6 +283,7 @@ public class SecurityFocusedPass {
                             .filePath(filePath)
                             .lineStart(secIssue.line() != null ? secIssue.line() : 1)
                             .lineEnd(secIssue.line() != null ? secIssue.line() : 1)
+                            .codeSnippet(secIssue.existingCode())
                             .ruleId(secIssue.owasp() != null ? secIssue.owasp() : "SECURITY")
                             .suggestion(secIssue.recommendation())
                             .source(IssueSource.LLM)
@@ -349,7 +354,9 @@ public class SecurityFocusedPass {
     // Records for JSON deserialization
     private record SecurityIssueResponse(List<SecurityIssue> issues) {}
     private record SecurityIssue(String title, String description, String reasoning, String severity,
-                                 String owasp, Integer line, String recommendation, String file) {}
+                                 String owasp, Integer line,
+                                 @JsonProperty("existing_code") String existingCode,
+                                 String recommendation, String file) {}
 
     /**
      * Cria um issue de segurança.

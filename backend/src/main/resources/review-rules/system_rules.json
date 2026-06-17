@@ -1,0 +1,13 @@
+{
+  "defaultRule": "default.md",
+  "pathRuleMap": [
+    { "pattern": "**/*.java", "rule": "java.md" },
+    { "pattern": "**/*.kt", "rule": "java.md" },
+    { "pattern": "**/*.{ts,tsx,js,jsx,mjs,cjs}", "rule": "ts_js.md" },
+    { "pattern": "**/*.py", "rule": "python.md" },
+    { "pattern": "**/*.go", "rule": "go.md" },
+    { "pattern": "**/*.rs", "rule": "rust.md" },
+    { "pattern": "**/*.{yml,yaml}", "rule": "yaml.md" },
+    { "pattern": "**/*.sql", "rule": "sql.md" }
+  ]
+}
