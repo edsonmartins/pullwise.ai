@@ -7,10 +7,14 @@ import com.pullwise.api.application.service.integration.GitLabService;
 import com.pullwise.api.application.service.llm.router.MultiModelLLMRouter;
 import com.pullwise.api.application.service.graph.blast.BlastRadiusResult;
 import com.pullwise.api.application.service.review.pipeline.pass.*;
+import com.pullwise.api.application.service.config.ConfigurationResolver;
 import com.pullwise.api.application.service.review.pipeline.synthesis.BlastRadiusConsolidator;
+import com.pullwise.api.application.service.review.pipeline.synthesis.CommentPositioner;
 import com.pullwise.api.application.service.review.pipeline.synthesis.IssuePrioritizer;
 import com.pullwise.api.application.service.review.pipeline.synthesis.ResultSynthesizer;
 import com.pullwise.api.application.service.review.pipeline.synthesis.IssueDuplicationDetector;
+import com.pullwise.api.application.service.review.pipeline.synthesis.ReviewReflectionFilter;
+import com.pullwise.api.domain.constants.ConfigKeys;
 import com.pullwise.api.domain.model.Issue;
 import com.pullwise.api.domain.model.PullRequest;
 import com.pullwise.api.domain.model.Review;
@@ -57,7 +61,10 @@ public class MultiPassReviewOrchestrator {
     private final ResultSynthesizer resultSynthesizer;
     private final IssueDuplicationDetector duplicationDetector;
     private final BlastRadiusConsolidator blastRadiusConsolidator;
+    private final CommentPositioner commentPositioner;
+    private final ReviewReflectionFilter reviewReflectionFilter;
     private final IssuePrioritizer issuePrioritizer;
+    private final ConfigurationResolver configurationResolver;
     private final MultiModelLLMRouter llmRouter;
     private final IssueRepository issueRepository;
     private final GitHubService gitHubService;
@@ -141,21 +148,42 @@ public class MultiPassReviewOrchestrator {
                 log.debug("Consolidator promoted {} issue(s) by blast radius", promoted);
             }
 
+            Long projectId = pullRequest.getProject() != null ? pullRequest.getProject().getId() : null;
+
             // ============================================
-            // DEDUP + PRIORITIZAÇÃO + SÍNTESE FINAL
+            // COMMENT POSITIONING (correção de line drift)
+            // ============================================
+            // Corrige lineStart/lineEnd dos achados de LLM casando o trecho de
+            // código reportado contra o diff. Roda ANTES do dedup (que compara
+            // por número de linha). Determinístico, sem custo de LLM.
+            if (isEnabled(projectId, ConfigKeys.REVIEW_POSITION_CORRECTION)) {
+                int repositioned = commentPositioner.reposition(allIssues, diffs);
+                if (repositioned > 0) {
+                    log.debug("CommentPositioner corrected line numbers of {} issue(s)", repositioned);
+                }
+            }
+
+            // ============================================
+            // DEDUP + PRIORITIZAÇÃO + REFLEXÃO + SÍNTESE FINAL
             // ============================================
             log.debug("Synthesizing results");
 
             List<Issue> deduplicatedIssues = duplicationDetector.deduplicate(allIssues);
             List<Issue> prioritized = issuePrioritizer.prioritize(deduplicatedIssues, blast);
-            result.setDeduplicatedIssues(prioritized);
+
+            // Reflexão: remove achados de LLM que o diff prova estarem errados.
+            List<Issue> finalIssues = prioritized;
+            if (isEnabled(projectId, ConfigKeys.REVIEW_REFLECTION_ENABLED)) {
+                finalIssues = reviewReflectionFilter.filter(prioritized, diffs);
+            }
+            result.setDeduplicatedIssues(finalIssues);
 
             // Geração de executive summary
-            String executiveSummary = generateExecutiveSummary(review, prioritized, result);
+            String executiveSummary = generateExecutiveSummary(review, finalIssues, result);
             result.setExecutiveSummary(executiveSummary);
 
             // Salvar issues no banco
-            List<Issue> savedIssues = issueRepository.saveAll(prioritized);
+            List<Issue> savedIssues = issueRepository.saveAll(finalIssues);
             result.setSavedIssues(savedIssues);
 
             // Atualizar review
@@ -285,6 +313,17 @@ public class MultiPassReviewOrchestrator {
         if (impactResult == null || impactResult.getMetadata() == null) return null;
         Object raw = impactResult.getMetadata().get(CodeGraphImpactPass.METADATA_BLAST_RADIUS);
         return raw instanceof BlastRadiusResult br ? br : null;
+    }
+
+    /**
+     * Resolve um flag booleano de configuração para o projeto. Quando não há
+     * projeto associado, usa o default do {@link ConfigurationResolver}.
+     */
+    private boolean isEnabled(Long projectId, String configKey) {
+        if (projectId == null) {
+            return true; // default seguro: features ligadas
+        }
+        return Boolean.parseBoolean(configurationResolver.getConfig(projectId, configKey));
     }
 
     /**

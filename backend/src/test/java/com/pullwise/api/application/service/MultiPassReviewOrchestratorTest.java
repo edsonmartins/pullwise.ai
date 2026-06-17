@@ -9,10 +9,13 @@ import com.pullwise.api.application.service.review.pipeline.MultiPassReviewOrche
 import com.pullwise.api.application.service.review.pipeline.MultiPassReviewOrchestrator.PassResult;
 import com.pullwise.api.application.service.review.pipeline.MultiPassReviewOrchestrator.ReviewResult;
 import com.pullwise.api.application.service.review.pipeline.pass.*;
+import com.pullwise.api.application.service.config.ConfigurationResolver;
 import com.pullwise.api.application.service.review.pipeline.synthesis.BlastRadiusConsolidator;
+import com.pullwise.api.application.service.review.pipeline.synthesis.CommentPositioner;
 import com.pullwise.api.application.service.review.pipeline.synthesis.IssueDuplicationDetector;
 import com.pullwise.api.application.service.review.pipeline.synthesis.IssuePrioritizer;
 import com.pullwise.api.application.service.review.pipeline.synthesis.ResultSynthesizer;
+import com.pullwise.api.application.service.review.pipeline.synthesis.ReviewReflectionFilter;
 import com.pullwise.api.domain.model.*;
 import com.pullwise.api.domain.enums.*;
 import com.pullwise.api.domain.repository.IssueRepository;
@@ -43,7 +46,10 @@ class MultiPassReviewOrchestratorTest {
     @Mock private ResultSynthesizer resultSynthesizer;
     @Mock private IssueDuplicationDetector duplicationDetector;
     @Mock private BlastRadiusConsolidator blastRadiusConsolidator;
+    @Mock private CommentPositioner commentPositioner;
+    @Mock private ReviewReflectionFilter reviewReflectionFilter;
     @Mock private IssuePrioritizer issuePrioritizer;
+    @Mock private ConfigurationResolver configurationResolver;
     @Mock private MultiModelLLMRouter llmRouter;
     @Mock private IssueRepository issueRepository;
     @Mock private GitHubService gitHubService;
@@ -56,7 +62,8 @@ class MultiPassReviewOrchestratorTest {
         orchestrator = new MultiPassReviewOrchestrator(
                 sastAggregatorPass, llmPrimaryPass, securityFocusedPass,
                 codeGraphImpactPass, resultSynthesizer, duplicationDetector,
-                blastRadiusConsolidator, issuePrioritizer,
+                blastRadiusConsolidator, commentPositioner, reviewReflectionFilter,
+                issuePrioritizer, configurationResolver,
                 llmRouter, issueRepository, gitHubService,
                 bitBucketService, gitLabService, azureDevOpsService
         );

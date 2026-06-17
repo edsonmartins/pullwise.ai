@@ -1,10 +1,12 @@
 package com.pullwise.api.application.service.review.pipeline.pass;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pullwise.api.application.service.config.ConfigurationResolver;
 import com.pullwise.api.application.service.integration.GitHubService;
 import com.pullwise.api.domain.constants.ConfigKeys;
 import com.pullwise.api.application.service.llm.router.MultiModelLLMRouter;
+import com.pullwise.api.application.service.review.pipeline.rules.ReviewRuleResolver;
 import com.pullwise.api.domain.model.Issue;
 import com.pullwise.api.domain.model.PullRequest;
 import com.pullwise.api.domain.model.Review;
@@ -39,6 +41,7 @@ public class LlmPrimaryPass {
     private final MultiModelLLMRouter llmRouter;
     private final ObjectMapper objectMapper;
     private final ConfigurationResolver configurationResolver;
+    private final ReviewRuleResolver ruleResolver;
 
     /**
      * Executa a análise LLM primária.
@@ -167,9 +170,17 @@ public class LlmPrimaryPass {
             String language = projectId != null
                     ? configurationResolver.getConfig(projectId, ConfigKeys.REVIEW_LANGUAGE) : null;
 
+            // Checklist determinístico por tipo de arquivo (rule matching)
+            String rule = isEnabled(projectId, ConfigKeys.REVIEW_RULE_GUIDANCE_ENABLED)
+                    ? ruleResolver.resolve(filePath) : "";
+
+            // Plan phase: para arquivos grandes, gera um mapa de risco que foca
+            // a análise principal (gated por threshold de linhas alteradas).
+            String planGuidance = buildPlanGuidance(projectId, filePath, changes, rule);
+
             // Construir prompt para análise
             String systemPrompt = buildSystemPrompt(language);
-            String userPrompt = buildAnalysisPrompt(filePath, changes, sastContext);
+            String userPrompt = buildAnalysisPrompt(filePath, changes, sastContext, rule, planGuidance);
 
             // Executar análise via LLM router
             var response = llmRouter.execute(
@@ -219,6 +230,7 @@ public class LlmPrimaryPass {
                   "reasoning": "Step-by-step reasoning of how you identified this issue and why it matters",
                   "severity": "CRITICAL|HIGH|MEDIUM|LOW",
                   "line": 123,
+                  "existing_code": "the exact original line(s) this issue refers to, copied VERBATIM from the diff (without the leading +/- markers)",
                   "category": "BUG|CODE_SMELL|PERFORMANCE|ARCHITECTURE",
                   "suggestion": "Concrete suggestion for how to fix this issue"
                 }
@@ -229,6 +241,9 @@ public class LlmPrimaryPass {
             Important:
             - Only report real issues, not stylistic preferences
             - Be specific about line numbers and affected code
+            - ALWAYS fill "existing_code" with the offending line(s) copied verbatim
+              from the diff (no +/- markers). This is used to locate the issue
+              precisely, so it must match the source exactly.
             - Provide actionable suggestions, not vague advice
             - Higher severity issues require stronger evidence in your reasoning
             """;
@@ -237,7 +252,8 @@ public class LlmPrimaryPass {
     /**
      * Constrói o prompt de análise para um arquivo específico.
      */
-    private String buildAnalysisPrompt(String filePath, List<FileChange> changes, String sastContext) {
+    private String buildAnalysisPrompt(String filePath, List<FileChange> changes, String sastContext,
+                                       String rule, String planGuidance) {
         StringBuilder sb = new StringBuilder();
         sb.append("Review the following code changes:\n\n");
         sb.append("**File**: ").append(filePath).append("\n\n");
@@ -254,9 +270,107 @@ public class LlmPrimaryPass {
         sb.append("**SAST Context**:\n");
         sb.append(sastContext).append("\n\n");
 
+        if (rule != null && !rule.isBlank()) {
+            sb.append("**Review checklist for this file type** (focus your analysis here):\n");
+            sb.append(rule).append("\n\n");
+        }
+
+        if (planGuidance != null && !planGuidance.isBlank()) {
+            sb.append("**Suggested focus areas (review plan)**:\n");
+            sb.append(planGuidance).append("\n\n");
+        }
+
         sb.append("Please analyze and return issues in the specified JSON format.");
 
         return sb.toString();
+    }
+
+    /**
+     * Plan phase: para arquivos grandes (acima do threshold de linhas), pede ao
+     * LLM um mapa de risco curto que será injetado na análise principal para
+     * focar a atenção. Retorna "" quando desabilitada, abaixo do threshold ou
+     * em caso de falha (degradação graciosa).
+     */
+    private String buildPlanGuidance(Long projectId, String filePath, List<FileChange> changes, String rule) {
+        if (!isEnabled(projectId, ConfigKeys.REVIEW_PLAN_PHASE_ENABLED)) {
+            return "";
+        }
+        int threshold = parseIntConfig(projectId, ConfigKeys.REVIEW_PLAN_LINE_THRESHOLD, 50);
+        int changed = countChangedLines(changes);
+        if (changed < threshold) {
+            return "";
+        }
+
+        try {
+            String systemPrompt = """
+                You are a code review planner. Given a diff, produce a SHORT risk map
+                that will focus a deeper review — do not review in detail yet.
+
+                Output 2-5 bullet points. Each bullet: the specific risk area (with a
+                hint of where in the diff) and why it deserves attention. Be concrete
+                and concise. No preamble, no JSON, just the bullets.
+                """;
+
+            StringBuilder up = new StringBuilder();
+            up.append("**File**: ").append(filePath).append(" (").append(changed)
+                    .append(" changed lines)\n\n```diff\n");
+            for (FileChange change : changes) {
+                up.append(change.getDiff()).append("\n");
+            }
+            up.append("```\n");
+            if (rule != null && !rule.isBlank()) {
+                up.append("\nFile-type checklist to consider:\n").append(rule).append("\n");
+            }
+            up.append("\nList the top risk areas to review.");
+
+            var response = llmRouter.execute(ReviewTaskType.PRE_FILTER, systemPrompt, up.toString());
+            String plan = response.content();
+            return plan == null ? "" : plan.strip();
+        } catch (Exception e) {
+            log.debug("Plan phase skipped for {}: {}", filePath, e.getMessage());
+            return "";
+        }
+    }
+
+    /** Conta as linhas adicionadas/removidas (marcadores +/-) no diff do arquivo. */
+    private int countChangedLines(List<FileChange> changes) {
+        int count = 0;
+        for (FileChange change : changes) {
+            String diff = change.getDiff();
+            if (diff == null) {
+                continue;
+            }
+            for (String line : diff.split("\n")) {
+                if (line.isEmpty()) {
+                    continue;
+                }
+                char c = line.charAt(0);
+                if ((c == '+' && !line.startsWith("+++")) || (c == '-' && !line.startsWith("---"))) {
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+
+    /** Resolve um flag booleano de configuração (default seguro: ligado). */
+    private boolean isEnabled(Long projectId, String configKey) {
+        if (projectId == null) {
+            return true;
+        }
+        return Boolean.parseBoolean(configurationResolver.getConfig(projectId, configKey));
+    }
+
+    private int parseIntConfig(Long projectId, String configKey, int fallback) {
+        if (projectId == null) {
+            return fallback;
+        }
+        try {
+            String value = configurationResolver.getConfig(projectId, configKey);
+            return value != null ? Integer.parseInt(value.trim()) : fallback;
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
     }
 
     /**
@@ -309,6 +423,7 @@ public class LlmPrimaryPass {
                             .filePath(filePath)
                             .lineStart(llmIssue.line() != null ? llmIssue.line() : 1)
                             .lineEnd(llmIssue.line() != null ? llmIssue.line() : 1)
+                            .codeSnippet(llmIssue.existingCode())
                             .ruleId("LLM_ANALYSIS")
                             .source(IssueSource.LLM)
                             .createdAt(LocalDateTime.now())
@@ -351,7 +466,9 @@ public class LlmPrimaryPass {
     // Records for JSON deserialization
     private record LlmIssueResponse(List<LlmIssue> issues) {}
     private record LlmIssue(String title, String description, String reasoning,
-                             String severity, Integer line, String category, String suggestion) {}
+                             String severity, Integer line,
+                             @JsonProperty("existing_code") String existingCode,
+                             String category, String suggestion) {}
 
     /**
      * Extrai o bloco JSON de uma resposta markdown.

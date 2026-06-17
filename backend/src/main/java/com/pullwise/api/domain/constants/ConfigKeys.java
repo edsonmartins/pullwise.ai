@@ -60,6 +60,38 @@ public final class ConfigKeys {
     /** Threshold de score de risco para auto-approve (0-100). Tipo: NUMBER. Default: 20. */
     public static final String REVIEW_AUTO_APPROVE_THRESHOLD = "review.auto_approve_threshold";
 
+    /**
+     * Corrige o número de linha dos achados de LLM casando o trecho de código
+     * reportado contra o diff (elimina line drift). Tipo: BOOLEAN. Default: "true".
+     */
+    public static final String REVIEW_POSITION_CORRECTION = "review.position_correction";
+
+    /**
+     * Passo de reflexão que remove achados de LLM provados errados pelo diff
+     * (anti falso-positivo). Custa uma chamada LLM extra por arquivo com
+     * achados. Tipo: BOOLEAN. Default: "true".
+     */
+    public static final String REVIEW_REFLECTION_ENABLED = "review.reflection_enabled";
+
+    /**
+     * Injeta no prompt do LLM um checklist de review específico por tipo de
+     * arquivo (resolvido por glob). Tipo: BOOLEAN. Default: "true".
+     */
+    public static final String REVIEW_RULE_GUIDANCE_ENABLED = "review.rule_guidance_enabled";
+
+    /**
+     * Habilita a fase de planejamento (plan phase): para arquivos grandes, gera
+     * antes um mapa de risco que foca a análise principal. Custa uma chamada LLM
+     * extra por arquivo acima do threshold. Tipo: BOOLEAN. Default: "true".
+     */
+    public static final String REVIEW_PLAN_PHASE_ENABLED = "review.plan_phase_enabled";
+
+    /**
+     * Número mínimo de linhas alteradas em um arquivo para acionar a plan phase.
+     * Tipo: NUMBER. Default: 50.
+     */
+    public static final String REVIEW_PLAN_LINE_THRESHOLD = "review.plan_line_threshold";
+
     // ===== Integration: SonarQube =====
 
     /** URL do servidor SonarQube. Tipo: STRING. */

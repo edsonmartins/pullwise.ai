@@ -109,6 +109,11 @@ public class ConfigurationResolver {
             case ConfigKeys.RAG_ENABLED -> "false";
             case ConfigKeys.REVIEW_AUTO_POST -> "true";
             case ConfigKeys.REVIEW_INCLUDE_SUMMARY -> "true";
+            case ConfigKeys.REVIEW_POSITION_CORRECTION -> "true";
+            case ConfigKeys.REVIEW_REFLECTION_ENABLED -> "true";
+            case ConfigKeys.REVIEW_RULE_GUIDANCE_ENABLED -> "true";
+            case ConfigKeys.REVIEW_PLAN_PHASE_ENABLED -> "true";
+            case ConfigKeys.REVIEW_PLAN_LINE_THRESHOLD -> "50";
             default -> null;
         };
     }
