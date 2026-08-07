@@ -9,14 +9,14 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: create-drop  # Gera schema das entities; bypassa drifts pré-existentes em migrations
+      ddl-auto: validate  # Valida entities contra o schema criado pelas migrations
     open-in-view: false
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
 
   flyway:
-    enabled: false  # ddl-auto cuida do schema em tests
+    enabled: true  # Migrations são a fonte do schema também em testes
 
 logging:
   level:

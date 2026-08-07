@@ -7,6 +7,7 @@ import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.caffeine.CaffeineCacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 
 import java.util.concurrent.TimeUnit;
 
@@ -29,6 +30,7 @@ public class ChatModelCacheConfig {
      * Cache Manager para ChatModels.
      */
     @Bean
+    @Primary
     public CacheManager chatModelCacheManager() {
         CaffeineCacheManager cacheManager = new CaffeineCacheManager(CHAT_MODEL_CACHE);
         cacheManager.setCaffeine(Caffeine.newBuilder()

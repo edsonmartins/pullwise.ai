@@ -19,8 +19,7 @@ class WebSocketServiceTest {
 
     private WebSocketService webSocketService;
 
-    @Mock
-    private ObjectMapper objectMapper;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Mock
     private WebSocketSession session;

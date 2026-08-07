@@ -65,22 +65,19 @@ public class FixSuggestion {
     /**
      * Código corrigido proposto.
      */
-    @Lob
-    @Column(columnDefinition = "TEXT")
+    @Column(columnDefinition = "text")
     private String fixedCode;
 
     /**
      * Código original (para diff).
      */
-    @Lob
-    @Column(columnDefinition = "TEXT")
+    @Column(columnDefinition = "text")
     private String originalCode;
 
     /**
      * Explicação da correção.
      */
-    @Lob
-    @Column(columnDefinition = "TEXT")
+    @Column(columnDefinition = "text")
     private String explanation;
 
     /**
@@ -130,8 +127,7 @@ public class FixSuggestion {
     /**
      * Mensagem de erro se aplicação falhou.
      */
-    @Lob
-    @Column(columnDefinition = "TEXT")
+    @Column(columnDefinition = "text")
     private String errorMessage;
 
     /**
