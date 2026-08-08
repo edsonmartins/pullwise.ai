@@ -2,6 +2,7 @@ package com.pullwise.api.application.service.llm.config;
 
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cache.annotation.EnableCaching;
@@ -13,14 +14,8 @@ import org.springframework.web.client.RestTemplate;
 import jakarta.annotation.PostConstruct;
 import java.time.Duration;
 
-/**
- * Configuração Spring para o ChatModel LLM.
- *
- * <p>Registra o ChatLanguageModel como bean do Spring e configura o cache.
- */
 @Slf4j
 @Configuration
-@EnableCaching
 @EnableConfigurationProperties(LLMChatModelProperties.class)
 @ConditionalOnProperty(
         prefix = "pullwise.llm",
@@ -52,9 +47,6 @@ public class LLMChatModelConfiguration {
         log.info("=================================");
     }
 
-    /**
-     * RestTemplate para requisições LLM.
-     */
     @Bean
     @Primary
     public RestTemplate llmRestTemplate() {
@@ -69,11 +61,13 @@ public class LLMChatModelConfiguration {
                 .build();
     }
 
-    /**
-     * ChatLanguageModel primário para a aplicação.
-     */
     @Bean
     @Primary
+    @ConditionalOnExpression(
+        "#{'${pullwise.llm.provider:OPENROUTER}' == 'OLLAMA' " +
+        "|| '${pullwise.llm.provider:OPENROUTER}' == 'GEMMA' " +
+        "|| '${pullwise.llm.api-key:}' != ''}"
+    )
     public ChatLanguageModel chatLanguageModel() {
         log.info("Initializing ChatLanguageModel");
 

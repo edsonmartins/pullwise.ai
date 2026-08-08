@@ -220,6 +220,17 @@ server:
     include-message: always
     include-binding-errors: always
 
+# Health
+management:
+  health:
+    jms:
+      enabled: false
+  endpoint:
+    health:
+      status:
+        http-mapping:
+          down: 200
+
 # Logging
 logging:
   level:

@@ -91,8 +91,7 @@ public class LLMRoutingDecision {
      * JSON com detalhes adicionais da decisão de roteamento.
      * Pode incluir: razão da escolha, alternativas consideradas, score de confiança, etc.
      */
-    @Lob
-    @Column(name = "reasoning")
+    @Column(name = "reasoning", columnDefinition = "text")
     private String reasoning;
 
     /**

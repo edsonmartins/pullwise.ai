@@ -14,15 +14,14 @@ import org.testcontainers.utility.DockerImageName;
 /**
  * Base para testes de integração JPA (Postgres real via Testcontainers).
  *
- * <p>Usa {@link DataJpaTest} para evitar carregar o ApplicationContext inteiro
- * (que tem múltiplos drifts pré-existentes em beans LLM/integrations).
+ * <p>Usa {@link DataJpaTest} para evitar carregar o ApplicationContext inteiro.
  * Postgres com extensão {@code vector} é provisionado via {@code init-test-db.sql}.
- * O schema vem de {@code ddl-auto=create-drop} (não Flyway), evitando drifts
- * entre migrations e entities.
+ * O schema vem das migrations Flyway e as entities são validadas contra ele
+ * ({@code ddl-auto=validate}), garantindo que entities e migrations não divirjam.
  */
 @DataJpaTest(properties = {
-        "spring.jpa.hibernate.ddl-auto=create-drop",
-        "spring.flyway.enabled=false"
+        "spring.jpa.hibernate.ddl-auto=validate",
+        "spring.flyway.enabled=true"
 })
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Testcontainers

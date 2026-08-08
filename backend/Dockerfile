@@ -1,6 +1,6 @@
 # Multi-stage build for Pullwise Backend
 # Build stage
-FROM eclipse-temurin:17-jdk-alpine AS build
+FROM maven:3.9-eclipse-temurin-17 AS build
 
 WORKDIR /app
 
@@ -8,30 +8,30 @@ WORKDIR /app
 COPY pom.xml .
 
 # Download dependencies (will be cached if pom.xml doesn't change)
-RUN apk add --no-cache curl && \
-    curl -o /app/mvnw https://raw.githubusercontent.com/takari/maven-wrapper/mvnw/3.9.9/mvnw && \
-    chmod +x /app/mvnw && \
-    ./mvnw dependency:go-offline -B
+RUN mvn dependency:go-offline -B
 
 # Copy source and build
 COPY src ./src
 
-RUN ./mvnw clean package -DskipTests -B
+RUN mvn clean package -DskipTests -B
 
 # Runtime stage
-FROM eclipse-temurin:17-jre-alpine
+FROM eclipse-temurin:17-jre-jammy
 
 WORKDIR /app
 
 # Install curl for health check
-RUN apk add --no-cache curl
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl && \
+    rm -rf /var/lib/apt/lists/*
 
-# Add non-root user for security
-RUN addgroup -S spring && adduser -S spring -G spring
+# Add non-root user for security and prepare log directory
+RUN groupadd -r spring && useradd -r -g spring spring && \
+    mkdir -p /app/logs && chown -R spring:spring /app
 USER spring:spring
 
 # Copy jar from build stage
-COPY --from=build /app/target/*.jar app.jar
+COPY --from=build --chown=spring:spring /app/target/*.jar app.jar
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=60s --retries=3 \
