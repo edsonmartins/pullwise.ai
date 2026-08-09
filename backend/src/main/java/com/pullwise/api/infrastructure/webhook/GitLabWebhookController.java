@@ -55,12 +55,16 @@ public class GitLabWebhookController {
         log.info("Received GitLab webhook event: {}", eventType);
 
         try {
-            // Validar token do webhook
-            if (webhookSecret != null && !webhookSecret.isBlank()) {
-                if (!webhookSecret.equals(token)) {
-                    log.warn("Invalid GitLab webhook token from {}", request.getRemoteAddr());
-                    return ResponseEntity.status(401).build();
-                }
+            // Fail-closed: webhook secret é obrigatório para aceitar eventos
+            if (webhookSecret == null || webhookSecret.isBlank()) {
+                log.error("GitLab webhook secret not configured; rejecting webhook from {}",
+                        request.getRemoteAddr());
+                return ResponseEntity.status(503).build();
+            }
+
+            if (!webhookSecret.equals(token)) {
+                log.warn("Invalid GitLab webhook token from {}", request.getRemoteAddr());
+                return ResponseEntity.status(401).build();
             }
 
             GitLabWebhookPayload webhookPayload =
