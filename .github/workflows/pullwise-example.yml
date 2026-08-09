@@ -1,10 +1,15 @@
 # Example: Using Pullwise GitHub Action for AI code reviews
-# Add this to your repository's .github/workflows/ directory
+# This repo is itself the action (action.yml at the repository root).
+# To use Pullwise in your own repository, publish this action and reference
+# it by name, e.g. `uses: <org>/<repo>@<tag>`, then copy this workflow.
 #
 # Prerequisites:
 # 1. Sign up at https://pullwise.ai or set up a self-hosted instance
 # 2. Create an API key in the Pullwise dashboard
 # 3. Add the API key as a repository secret named PULLWISE_API_KEY
+#
+# When PULLWISE_API_KEY is not set, the review step skips with a notice
+# instead of failing the check (so PRs from forks remain green).
 
 name: Pullwise Code Review
 
@@ -24,7 +29,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Pullwise Review
-        uses: pullwise/pullwise-action@v1
+        uses: ./
         with:
           api-key: ${{ secrets.PULLWISE_API_KEY }}
           # api-url: https://your-instance.com  # For self-hosted
