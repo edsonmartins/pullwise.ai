@@ -173,6 +173,9 @@ llm:
 
 # Pullwise LLM Configuration (LangChain4j)
 pullwise:
+  security:
+    cors:
+      allowed-origins: ${CORS_ORIGINS:http://localhost:3000,http://localhost:3001,http://localhost:3002,https://pullwise.ai}
   review:
     post-as-comment: true
     include-summary: true

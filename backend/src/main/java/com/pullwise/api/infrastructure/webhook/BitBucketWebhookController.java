@@ -23,6 +23,7 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
+import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 
@@ -59,12 +60,16 @@ public class BitBucketWebhookController {
         log.info("Received BitBucket webhook event: {}", eventType);
 
         try {
-            // Validate webhook signature if secret is configured
-            if (webhookSecret != null && !webhookSecret.isBlank()) {
-                if (!validateSignature(payload, signature)) {
-                    log.warn("Invalid BitBucket webhook signature from {}", request.getRemoteAddr());
-                    return ResponseEntity.status(401).build();
-                }
+            // Fail-closed: webhook secret é obrigatório para aceitar eventos
+            if (webhookSecret == null || webhookSecret.isBlank()) {
+                log.error("BitBucket webhook secret not configured; rejecting webhook from {}",
+                        request.getRemoteAddr());
+                return ResponseEntity.status(503).build();
+            }
+
+            if (!validateSignature(payload, signature)) {
+                log.warn("Invalid BitBucket webhook signature from {}", request.getRemoteAddr());
+                return ResponseEntity.status(401).build();
             }
 
             BitBucketWebhookPayload webhookPayload =
@@ -256,7 +261,9 @@ public class BitBucketWebhookController {
             mac.init(secretKeySpec);
             byte[] hash = mac.doFinal(payload.getBytes(StandardCharsets.UTF_8));
             String expected = HexFormat.of().formatHex(hash);
-            return expected.equals(signature);
+            return MessageDigest.isEqual(
+                    expected.getBytes(StandardCharsets.UTF_8),
+                    signature.getBytes(StandardCharsets.UTF_8));
         } catch (NoSuchAlgorithmException | InvalidKeyException e) {
             log.error("Failed to validate BitBucket webhook signature", e);
             return false;

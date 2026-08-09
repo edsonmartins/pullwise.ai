@@ -144,11 +144,16 @@ management:
       percentiles-histogram:
         http.server.requests: true
 
+# Security — JWT_SECRET is required in prod. Startup fails fast when it is
+# missing, preventing the well-known dev default secret from being used.
+security:
+  jwt:
+    secret: ${JWT_SECRET}
+    expiration: ${JWT_EXPIRATION:86400000}
+
 # Application
 pullwise:
   security:
-    jwt-secret: ${JWT_SECRET}
-    jwt-expiration: ${JWT_EXPIRATION:86400000}
     cors:
       allowed-origins: ${CORS_ORIGINS:https://pullwise.ai,https://www.pullwise.ai}
       allowed-methods: GET,POST,PUT,DELETE,PATCH,OPTIONS
@@ -184,9 +189,9 @@ pullwise:
 
   stripe:
     api-key: ${STRIPE_API_KEY}
-      webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
-      success-url: https://pullwise.ai/billing/success
-      cancel-url: https://pullwise.ai/billing/canceled
+    webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+    success-url: https://pullwise.ai/billing/success
+    cancel-url: https://pullwise.ai/billing/canceled
 
   rag:
     enabled: ${RAG_ENABLED:false}

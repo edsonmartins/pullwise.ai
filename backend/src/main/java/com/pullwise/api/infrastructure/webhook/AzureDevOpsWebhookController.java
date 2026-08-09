@@ -57,12 +57,16 @@ public class AzureDevOpsWebhookController {
         log.info("Received Azure DevOps webhook from {}", request.getRemoteAddr());
 
         try {
-            // Validate webhook secret if configured
-            if (webhookSecret != null && !webhookSecret.isBlank()) {
-                if (!webhookSecret.equals(secret)) {
-                    log.warn("Invalid Azure DevOps webhook secret from {}", request.getRemoteAddr());
-                    return ResponseEntity.status(401).build();
-                }
+            // Fail-closed: webhook secret é obrigatório para aceitar eventos
+            if (webhookSecret == null || webhookSecret.isBlank()) {
+                log.error("Azure DevOps webhook secret not configured; rejecting webhook from {}",
+                        request.getRemoteAddr());
+                return ResponseEntity.status(503).build();
+            }
+
+            if (!webhookSecret.equals(secret)) {
+                log.warn("Invalid Azure DevOps webhook secret from {}", request.getRemoteAddr());
+                return ResponseEntity.status(401).build();
             }
 
             AzureDevOpsWebhookPayload webhookPayload =
