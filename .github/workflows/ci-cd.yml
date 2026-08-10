@@ -330,3 +330,9 @@ jobs:
       - name: Deploy to staging
         working-directory: ./deploy
         run: bash deploy-staging.sh
+
+      - name: Smoke test staging
+        working-directory: ./deploy
+        run: bash smoke-test-staging.sh
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL || format('http://{0}', secrets.STAGING_HOST) }}
