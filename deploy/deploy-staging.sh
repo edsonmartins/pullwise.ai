@@ -83,4 +83,7 @@ ssh "${SSH_OPTS[@]}" "$REMOTE" \
 echo ">>> Service status"
 ssh "${SSH_OPTS[@]}" "$REMOTE" "cd ~/$DEPLOY_DIR && docker compose ps"
 
+echo ">>> Installing daily Postgres backup (cron)"
+"$SCRIPT_DIR/backup-staging.sh" install
+
 echo ">>> Pullwise staging deploy completed successfully."
